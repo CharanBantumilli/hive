@@ -260,6 +260,23 @@ Hive's own tools run in-process and need no configuration (see [Tools](tools.md)
 
 The standalone `files-tools` server (`files_server.py`) exposes file I/O (`read_file`, `write_file`, `edit_file`, `search_files`); the `tools` server (`mcp_server.py`) exposes the full `aden_tools` integration catalog. Hive's queens and workers don't use either: they get the same file tools, and a curated subset of the integrations, in-process.
 
+### Servers agents run from the terminal
+
+A server's tools normally load into every agent's tool list, and their schemas are sent with every model call: ComfyUI's official server, [comfy-mcp](https://github.com/Comfy-Org/comfy-mcp), has 39 tools, about 15,600 tokens. Register a server with `--as-cli` instead, and its tools stay out of the tool list. Each agent gets one line naming the server and runs it with `terminal_exec`, through [mcp2cli](https://github.com/knowsuchagency/mcp2cli) by Stephan Fitzpatrick ([@knowsuchagency](https://github.com/knowsuchagency), MIT license), which turns a server's tools into commands:
+
+```bash
+hive mcp add --name comfy --transport stdio --as-cli \
+  --description "ComfyUI on this PC: run workflows, generate images" \
+  --env COMFYUI_URL=http://127.0.0.1:8000 \
+  -- uvx --from comfy-mcp --with "comfy-cli>=1.14.0" comfy-mcp
+
+hive mcp run comfy --list                      # its tools, as commands
+hive mcp run comfy run-workflow --help         # one command's flags
+hive mcp run comfy run-workflow --workflow-path /abs/wf.json --wait
+```
+
+Arguments after `--` are the server's command line, so they may start with `-`. Switch an installed server either way with `hive mcp mode <name> cli` or `hive mcp mode <name> tools`, or with **Use from terminal** under Configuration → Skills → MCP Tools → MCP Servers; agents see the change from their next session. A CLI-mode server can use the stdio, SSE or standard MCP HTTP transport, not a unix socket. Its env vars and headers reach the server through the environment, never on the command line, and mcp2cli caches its tool list under `$HIVE_HOME/cache/mcp2cli`.
+
 ## Storage
 
 Hive uses **file-based persistence** (no external database required). State lives under `HIVE_HOME`:

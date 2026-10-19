@@ -160,6 +160,10 @@ class QueenPhaseState:
     # and renders them via build_accounts_prompt(). Called on every prompt
     # rebuild so newly added/deleted credentials show up without restart.
     credentials_prompt_provider: Any = None  # Callable[[], str] | None
+    # The MCP servers the queen runs from the terminal (``hive mcp run``),
+    # fixed at session start like the tools loaded from the registry.
+    # See framework.loader.mcp_cli.
+    mcp_cli_prompt: str = ""
 
     # Queen identity (set once at session start by queen identity hook,
     # persisted here so it survives dynamic prompt refreshes across iterations).
@@ -426,6 +430,8 @@ class QueenPhaseState:
         credentials_block = _render_credentials_block(self.credentials_prompt_provider)
         if credentials_block:
             parts.append(credentials_block)
+        if self.mcp_cli_prompt:
+            parts.append(self.mcp_cli_prompt)
         if self.protocols_prompt:
             parts.append(self.protocols_prompt)
         return "\n\n".join(parts)

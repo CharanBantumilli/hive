@@ -30,6 +30,7 @@ dependencies = [
     { name = "httpx" },
     { name = "litellm" },
     { name = "mcp" },
+    { name = "mcp2cli" },
     { name = "psutil" },
     { name = "pydantic" },
 ]
@@ -74,6 +75,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "litellm", specifier = "==1.83.4" },
     { name = "mcp", specifier = ">=1.0.0" },
+    { name = "mcp2cli", specifier = ">=3.8,<4" },
     { name = "psutil", specifier = ">=5.9" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pytest", marker = "extra == 'testing'", specifier = ">=8.0" },
@@ -1760,6 +1762,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/fc/6d/62e76bbb8144d6ed86e202b5edd8a4cb631e7c8130f3f4893c3f90262b10/mcp-1.26.0.tar.gz", hash = "sha256:db6e2ef491eecc1a0d93711a76f28dec2e05999f93afd48795da1c1137142c66", size = 608005, upload-time = "2026-01-24T19:40:32.468Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/fd/d9/eaa1f80170d2b7c5ba23f3b59f766f3a0bb41155fbc32a69adfa1adaaef9/mcp-1.26.0-py3-none-any.whl", hash = "sha256:904a21c33c25aa98ddbeb47273033c435e595bbacfdb177f4bd87f6dceebe1ca", size = 233615, upload-time = "2026-01-24T19:40:30.652Z" },
+]
+
+[[package]]
+name = "mcp2cli"
+version = "3.8.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "mcp" },
+    { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e1/5a/78799e514fe43c5657c3756967e61935e96b753a2854ef23c8b96d9451b3/mcp2cli-3.8.0.tar.gz", hash = "sha256:232f541eb39de4abdd99e6066d715a42bc392cd78ed0641dccfdca7b50113dee", size = 55967, upload-time = "2026-10-12T06:17:33.771Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/aa/e9/6416f78c4621e8b82bb29d1c1c7e1f02780bbada42c924442772c3657f5f/mcp2cli-3.8.0-py3-none-any.whl", hash = "sha256:de087ca239d06b3104a1b7199a1c1326b5073602ef85b27456335a9099634988", size = 56258, upload-time = "2026-10-12T06:17:32.71Z" },
 ]
 
 [[package]]

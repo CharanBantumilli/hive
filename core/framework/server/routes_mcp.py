@@ -10,6 +10,7 @@ enable, and health-check user-registered MCP servers. The CLI path
 - POST   /api/mcp/servers/{name}/enable    -- enable a server
 - POST   /api/mcp/servers/{name}/disable   -- disable a server
 - POST   /api/mcp/servers/{name}/health    -- probe server health
+- POST   /api/mcp/servers/{name}/mode      -- reach it as tools or from the terminal
 
 New servers take effect on the *next* queen session start. Existing live
 queen sessions keep the tool list they booted with to avoid mid-turn
@@ -31,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 _VALID_TRANSPORTS = {"stdio", "http", "sse", "unix"}
+_VALID_MODES = {"tools", "cli"}
 
 
 def _registry() -> MCPRegistry:
@@ -87,12 +89,13 @@ def _server_to_summary(entry: dict[str, Any]) -> dict[str, Any]:
         "name": entry.get("name"),
         "source": entry.get("source"),
         "transport": entry.get("transport"),
+        "mode": entry.get("mode", "tools"),
         "description": (manifest.get("description") if isinstance(manifest, dict) else None) or "",
         "enabled": entry.get("enabled", True),
         "last_health_status": entry.get("last_health_status"),
         "last_error": entry.get("last_error"),
         "last_health_check_at": entry.get("last_health_check_at"),
-        "tool_count": (len(tools) if tools is not None else None),
+        "tool_count": (len(tools) if tools is not None else entry.get("last_tool_count")),
     }
 
 
@@ -150,8 +153,12 @@ async def handle_add_server(request: web.Request) -> web.Response:
           "command": "...", "args": [...], "env": {...}, "cwd": "...",
           "url": "...", "headers": {...},
           "socket_path": "...",
-          "description": "..."
+          "description": "...",
+          "mode": "tools" | "cli"
         }
+
+    ``mode`` defaults to ``"tools"``; ``"cli"`` keeps the server's tools out
+    of agents' tool lists and has them run it with ``hive mcp run``.
     """
     try:
         body = await request.json()
@@ -169,6 +176,9 @@ async def handle_add_server(request: web.Request) -> web.Response:
             {"error": f"'transport' must be one of {sorted(_VALID_TRANSPORTS)}"},
             status=400,
         )
+    mode = body.get("mode", "tools")
+    if mode not in _VALID_MODES:
+        return web.json_response({"error": f"'mode' must be one of {sorted(_VALID_MODES)}"}, status=400)
 
     reg = _registry()
     try:
@@ -183,6 +193,7 @@ async def handle_add_server(request: web.Request) -> web.Response:
             headers=body.get("headers"),
             socket_path=body.get("socket_path"),
             description=body.get("description", ""),
+            mode=mode,
         )
     except MCPError as exc:
         status = 409 if "already exists" in exc.what else 400
@@ -247,6 +258,26 @@ async def handle_disable(request: web.Request) -> web.Response:
     return await handle_set_enabled(request, enabled=False)
 
 
+async def handle_set_mode(request: web.Request) -> web.Response:
+    """POST /api/mcp/servers/{name}/mode — ``{"mode": "tools" | "cli"}``.
+
+    Takes effect on the next queen session, like adding a server.
+    """
+    name = request.match_info["name"]
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "Invalid JSON body"}, status=400)
+    mode = body.get("mode") if isinstance(body, dict) else None
+    if mode not in _VALID_MODES:
+        return web.json_response({"error": f"'mode' must be one of {sorted(_VALID_MODES)}"}, status=400)
+    try:
+        _registry().set_mode(name, mode)
+    except MCPError as exc:
+        return _mcp_error_response(exc, default_status=404)
+    return web.json_response({"name": name, "mode": mode, "hint": "Start a new queen session to apply it."})
+
+
 async def handle_health(request: web.Request) -> web.Response:
     """POST /api/mcp/servers/{name}/health — probe one server."""
     name = request.match_info["name"]
@@ -275,3 +306,4 @@ def register_routes(app: web.Application) -> None:
     app.router.add_post("/api/mcp/servers/{name}/enable", handle_enable)
     app.router.add_post("/api/mcp/servers/{name}/disable", handle_disable)
     app.router.add_post("/api/mcp/servers/{name}/health", handle_health)
+    app.router.add_post("/api/mcp/servers/{name}/mode", handle_set_mode)

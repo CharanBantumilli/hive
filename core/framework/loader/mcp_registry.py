@@ -63,6 +63,12 @@ _RETIRED_BUNDLED_SERVERS: dict[str, str] = {
 # ``ToolRegistry.load_registry_servers`` and ``resolve_for_agent``.
 DEFAULT_LOCAL_SERVER_NAMES: frozenset[str] = HARNESS_GROUP_NAMES
 
+# How agents reach a server. "tools": its tools load into the agent's tool
+# list. "cli": they never do; agents run it from the terminal with
+# ``hive mcp run`` (see framework.loader.mcp_cli), so its schemas cost no
+# context until a command is used.
+McpMode = Literal["tools", "cli"]
+
 
 class MCPRegistry:
     """Manages local MCP server state in $HIVE_HOME/mcp_registry/."""
@@ -224,6 +230,7 @@ class MCPRegistry:
         cwd: str | None = None,
         socket_path: str | None = None,
         description: str = "",
+        mode: McpMode = "tools",
     ) -> dict:
         """Register a local/running MCP server.
 
@@ -316,6 +323,7 @@ class MCPRegistry:
             manifest=manifest,
             transport=transport,
             installed_by="hive mcp add",
+            mode=mode,
         )
 
         data["servers"][name] = entry
@@ -419,6 +427,27 @@ class MCPRegistry:
         """Disable a server without removing it."""
         self._set_enabled(name, enabled=False)
 
+    def set_mode(self, name: str, mode: McpMode) -> None:
+        """Choose how agents reach a server: as tools, or from the terminal."""
+        if mode not in ("tools", "cli"):
+            raise MCPError(
+                code=MCPErrorCode.MCP_INSTALL_FAILED,
+                what=f"Invalid mode '{mode}' for server '{name}'",
+                why="Mode must be 'tools' or 'cli'.",
+                fix=f"Run: hive mcp mode {name} cli  — or: hive mcp mode {name} tools",
+            )
+        data = self._read_installed()
+        if name not in data["servers"]:
+            raise MCPError(
+                code=MCPErrorCode.MCP_INSTALL_FAILED,
+                what=f"Cannot set the mode of server '{name}'",
+                why="Server is not installed.",
+                fix="Run: hive mcp list  — to see installed servers.",
+            )
+        data["servers"][name]["mode"] = mode
+        self._write_installed(data)
+        logger.info("MCP server '%s' is now reached as %s", name, mode)
+
     def _set_enabled(self, name: str, *, enabled: bool) -> None:
         data = self._read_installed()
         if name not in data["servers"]:
@@ -446,6 +475,37 @@ class MCPRegistry:
         if entry is None:
             return None
         return {"name": name, **entry}
+
+    def cli_servers(self) -> list[dict]:
+        """The enabled servers in CLI mode: ``name``, ``description`` and
+        ``tool_count`` (``None`` until a health check has counted them)."""
+        servers = []
+        for entry in self.list_installed():
+            if entry.get("mode") != "cli" or not entry.get("enabled", True):
+                continue
+            manifest = self._get_effective_manifest(entry["name"], entry)
+            tools = manifest.get("tools")
+            servers.append(
+                {
+                    "name": entry["name"],
+                    "description": manifest.get("description", ""),
+                    "tool_count": len(tools) if tools else entry.get("last_tool_count"),
+                }
+            )
+        return servers
+
+    def server_config(self, name: str) -> MCPServerConfig | None:
+        """How to connect to installed server ``name``, overrides applied;
+        ``None`` when it isn't installed or its transport is unsupported."""
+        entry = self.get_server(name)
+        if entry is None:
+            return None
+        return self._manifest_to_server_config(
+            name,
+            self._get_effective_manifest(name, entry),
+            entry.get("overrides", {}),
+            transport_override=entry.get("transport"),
+        )
 
     def list_available(self) -> list[dict]:
         """List all servers from cached remote index."""
@@ -704,6 +764,10 @@ class MCPRegistry:
                 continue
             if not entry.get("enabled", True):
                 continue
+            if entry.get("mode") == "cli":
+                # Reached through `hive mcp run`, never loaded as tools.
+                logger.debug("Server '%s' is in CLI mode; not loading its tools", name)
+                continue
 
             manifest = self._get_effective_manifest(name, entry, cached_index)
 
@@ -921,6 +985,7 @@ class MCPRegistry:
 
             result["status"] = "healthy"
             result["tools"] = len(tools)
+            entry["last_tool_count"] = len(tools)
             entry["last_health_status"] = "healthy"
             entry["last_error"] = None
             entry["last_validated_with_hive_version"] = self._get_hive_version()
@@ -966,6 +1031,7 @@ class MCPRegistry:
         pinned: bool = False,
         auto_update: bool = False,
         resolved_package_version: str | None = None,
+        mode: McpMode = "tools",
     ) -> dict:
         """Build a standard installed server entry."""
         now = datetime.now(UTC).isoformat()
@@ -976,6 +1042,7 @@ class MCPRegistry:
             "installed_at": now,
             "installed_by": installed_by,
             "transport": transport,
+            "mode": mode,
             "enabled": True,
             "pinned": pinned,
             "auto_update": auto_update,

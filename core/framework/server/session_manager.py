@@ -1721,6 +1721,8 @@ class SessionManager:
         if _binding is None and _colony_id:
             _binding = ColonyBinding.for_name(_colony_id)
             session.binding = _binding
+        from framework.loader.mcp_cli import registry_cli_servers_prompt
+
         _colony_runtime_kwargs: dict[str, Any] = {
             "agent_spec": colony_spec,
             "goal": colony_goal,
@@ -1733,6 +1735,9 @@ class SessionManager:
             "binding": _binding,
             "queen_id": getattr(session, "queen_name", None) or None,
             "pipeline_stages": [],  # queen pipeline runs in queen_orchestrator, not here
+            # Workers' integrations block: the MCP servers they run from the
+            # terminal, as their queen does (framework.loader.mcp_cli).
+            "accounts_prompt": registry_cli_servers_prompt(),
         }
         if _colony_config is not None:
             _colony_runtime_kwargs["config"] = _colony_config

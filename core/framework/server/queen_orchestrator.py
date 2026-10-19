@@ -701,6 +701,9 @@ async def create_queen(
     # per-iteration prompt rebuild cheap; invalidated by routes_credentials
     # when the user adds/removes an integration.
     phase_state.credentials_prompt_provider = _build_credentials_provider(session.id)
+    from framework.loader.mcp_cli import registry_cli_servers_prompt
+
+    phase_state.mcp_cli_prompt = registry_cli_servers_prompt()
 
     # ---- Lifecycle tools (always registered) --------------------------
     register_queen_lifecycle_tools(
