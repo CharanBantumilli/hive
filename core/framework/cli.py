@@ -46,6 +46,12 @@ def _configure_paths() -> None:
 
 def main() -> None:
     _configure_paths()
+    import os
+
+    from framework.utils.python_env import drop_launcher_pythonhome
+
+    # Before anything starts a process: MCP servers, terminal commands, mcp2cli.
+    drop_launcher_pythonhome(os.environ)
     from hive import __version__
 
     parser = argparse.ArgumentParser(
