@@ -76,7 +76,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # ubuntu-24.04, not ubuntu-latest: on ubuntu-26.04 `playwright install chromium`
+        # fails ("Playwright does not support chromium on ubuntu26.04-x64"). Back to
+        # ubuntu-latest once the Playwright in uv.lock supports it.
+        os: [ubuntu-24.04, windows-latest]
     steps:
       - uses: actions/checkout@v4
 
