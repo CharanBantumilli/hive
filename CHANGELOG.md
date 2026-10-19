@@ -2,6 +2,10 @@
 
 > Full, detailed release notes live in [`docs/releases/`](docs/releases/). The entries below summarize the architecturally significant releases; older entries follow.
 
+## v1.0.11 — MCP from the Terminal
+
+**New:** agents can run an MCP server from the terminal (`hive mcp add --as-cli`, then `hive mcp run <server> ...`) instead of carrying its tools in every prompt, through [mcp2cli](https://github.com/knowsuchagency/mcp2cli) by Stephan Fitzpatrick (MIT); `worker_llm` and each queen's own model take `extra_body`. **Changed:** queens reflect on memory every few replies, not after every model call. **Fixed:** MCP servers on another Python version no longer crash when Hive runs from a uv-made virtualenv on Windows; Hive moved off the retired `claude-sonnet-4-20250514` (thanks, Omar Shalaby). See [docs/releases/v1.0.11.md](docs/releases/v1.0.11.md).
+
 ## v1.0.10 — Her Own Model
 
 **New:** a queen can run on a model of her own (`queen_llm`), set from her profile in the dashboard; her running chats switch at once. **Fixed:** `hive serve` stops within seconds instead of waiting on last reflections and open dashboard streams. See [docs/releases/v1.0.10.md](docs/releases/v1.0.10.md).
