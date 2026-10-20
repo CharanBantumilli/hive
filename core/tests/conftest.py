@@ -18,6 +18,7 @@ Two responsibilities:
 from __future__ import annotations
 
 import importlib
+import os
 from pathlib import Path
 
 import pytest
@@ -105,8 +106,17 @@ def _isolate_hive_home_autouse(_session_hive_home_floor, tmp_path, monkeypatch):
     ``COLONIES_DIR`` binding rewritten. A test that calls
     ``monkeypatch.undo()`` falls back to the session sandbox, never to the
     developer's real home.
+
+    ``HIVE_CREDENTIAL_KEY`` is put back afterwards too: ``load_credential_key()``
+    sets it in ``os.environ`` itself, out of monkeypatch's sight, and a test's
+    fake key left there is what a later test persisted over a real home's key.
     """
+    saved_key = os.environ.get("HIVE_CREDENTIAL_KEY")
     yield _sandbox_hive_home(monkeypatch, tmp_path)
+    if saved_key is None:
+        os.environ.pop("HIVE_CREDENTIAL_KEY", None)
+    else:
+        os.environ["HIVE_CREDENTIAL_KEY"] = saved_key
 
 
 @pytest.fixture(autouse=True)
