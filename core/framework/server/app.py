@@ -476,9 +476,10 @@ def _atexit_reap_browsers() -> None:
 async def _on_shutdown(app: web.Application) -> None:
     """Gracefully unload all agents on server shutdown, then reap any browser
     tab groups the session/colony reapers didn't cover."""
-    sampler = app.get("resource_sampler")
-    if sampler is not None:
-        sampler.cancel()
+    for name in ("resource_sampler", "soul_scheduler"):
+        task = app.get(name)
+        if task is not None:
+            task.cancel()
     manager: SessionManager = app["manager"]
     await manager.shutdown_all()
     await _reap_browser_contexts()
@@ -543,6 +544,16 @@ async def start_resource_sampler(app: web.Application) -> None:
     """aiohttp on_startup hook: arm the resource sampler for the server's life."""
     app["resource_sampler"] = asyncio.create_task(_resource_sampler_loop(app))
     logger.info("resource sampler started")
+
+
+async def start_soul_scheduler(app: web.Application) -> None:
+    """aiohttp on_startup hook: run each queen's daily soul reflection (``soul_reflection``) when it is due."""
+    from framework.agents.queen.soul_reflection import scheduler, soul_queens
+
+    app["soul_scheduler"] = asyncio.create_task(scheduler(app["manager"]))
+    queens = soul_queens()
+    if queens:
+        logger.info("soul: daily reflection scheduled for %s", ", ".join(queens))
 
 
 async def handle_health(request: web.Request) -> web.Response:
@@ -1052,6 +1063,8 @@ def create_app(model: str | None = None) -> web.Application:
     # system memory every ~15s into a rolling history, exposed at
     # /api/health/resources, with an early-warning log on verdict degradation.
     app.on_startup.append(start_resource_sampler)
+    # Each queen with a soul revises it once a day; see framework.agents.queen.soul_reflection.
+    app.on_startup.append(start_soul_scheduler)
     app.on_shutdown.append(_on_shutdown)
     # Last-ditch browser cleanup for a non-graceful exit that skips on_shutdown.
     import atexit
@@ -1085,6 +1098,7 @@ def create_app(model: str | None = None) -> web.Application:
     from framework.server.routes_sentinel import register_routes as register_sentinel_routes
     from framework.server.routes_sessions import register_routes as register_session_routes
     from framework.server.routes_skills import register_routes as register_skills_routes
+    from framework.server.routes_soul import register_routes as register_soul_routes
     from framework.server.routes_tasks import register_routes as register_task_routes
     from framework.server.routes_workers import register_routes as register_worker_routes
 
@@ -1096,6 +1110,7 @@ def create_app(model: str | None = None) -> web.Application:
     register_session_routes(app)
     register_worker_routes(app)
     register_queen_routes(app)
+    register_soul_routes(app)
     register_queen_tools_routes(app)
     register_colonies_routes(app)
     register_colony_tools_routes(app)

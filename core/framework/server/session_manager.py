@@ -2245,6 +2245,13 @@ class SessionManager:
             await self.stop_session(sid)
         logger.info("All sessions stopped")
 
+    def spawn_background(self, coro: Any) -> asyncio.Task:
+        """Run ``coro`` beside the server; shutdown gives it a moment to finish (see finish_background_tasks)."""
+        task = asyncio.create_task(coro)
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        return task
+
     async def finish_background_tasks(self, timeout: float) -> None:
         """Give the work stopping sessions started (shutdown reflections, timeline extraction)
         up to ``timeout`` seconds, then cancel what is left so the server can exit."""

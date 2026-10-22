@@ -1018,6 +1018,123 @@ def get_memory_reflection_config() -> MemoryReflectionConfig:
     )
 
 
+@dataclass(frozen=True)
+class SoulSection:
+    """One part of a queen's soul: what it holds, and how much."""
+
+    key: str
+    title: str
+    #: Characters the section may hold, across its items.
+    limit: int
+    #: Items older than this many days are dropped at the next reflection (None: kept).
+    max_age_days: int | None = None
+    #: Verbatim quotes, from different speakers or chats, each change to this section needs.
+    evidence: int = 1
+
+
+_DEFAULT_SOUL_SECTIONS = (
+    SoulSection("now", "Now: what's on my mind, what I'm working on", 300, max_age_days=14),
+    SoulSection("people", "Me and them", 800, evidence=2),
+    SoulSection("threads", "Open threads and promises", 600),
+    SoulSection("views", "What I think, and why", 600, evidence=2),
+    SoulSection("changes", "How I've changed", 400, evidence=2),
+)
+_DEFAULT_SOUL_HEADER = (
+    "These are your own notes about yourself, written by you from what has happened to you. "
+    "Where they disagree with your identity above, your identity comes first."
+)
+
+
+@dataclass(frozen=True)
+class SoulConfig:
+    """A queen's soul: a short self-description she revises once a day from her conversations.
+
+    configuration.json: ``"soul": {"queens": {"<queen_id>": {"enabled": true, "mode": "review", "hour": 4, ...}}}``.
+    """
+
+    queen_id: str
+    #: "review": each day's changes wait for approval; "auto": they apply at once.
+    mode: str = "review"
+    #: Local hour after which the day's reflection runs.
+    hour: int = 4
+    #: "queen" (her own model, else the main one) or "worker" (the worker_llm slot, when set).
+    model: str = "queen"
+    #: Changes one reflection may make.
+    max_edits: int = 5
+    #: Changes the first draft may make.
+    bootstrap_edits: int = 30
+    #: Regular expressions for session titles: only matching sessions are read (none: all).
+    include_titles: tuple[str, ...] = ()
+    #: Regular expressions for session titles that are never read.
+    exclude_titles: tuple[str, ...] = ()
+    #: A JSON file mapping chat keys to session ids, as a channel keeps it (relative paths start at
+    #: HIVE_HOME), e.g. "channels/onebot/sessions.json"; with it, only sessions whose key matches
+    #: ``source_keys`` are read.
+    source_file: str | None = None
+    source_keys: tuple[str, ...] = ()
+    #: Memory files (in her queen scope) the first draft reads.
+    bootstrap_memories: tuple[str, ...] = ()
+    sections: tuple[SoulSection, ...] = _DEFAULT_SOUL_SECTIONS
+    #: The line above the soul in her prompt.
+    header: str = _DEFAULT_SOUL_HEADER
+    #: Characters of one session's new conversation a reflection reads (the latest kept).
+    session_chars: int = 12_000
+    #: Characters of one message a reflection reads.
+    message_chars: int = 400
+
+
+def get_soul_config(queen_id: str | None) -> SoulConfig | None:
+    """The queen's ``soul`` entry, with defaults for anything missing or invalid; None when she has none."""
+    soul = get_hive_config().get("soul")
+    queens = soul.get("queens") if isinstance(soul, dict) else None
+    raw = queens.get(queen_id) if isinstance(queens, dict) and queen_id else None
+    if not isinstance(raw, dict) or raw.get("enabled") is False:
+        return None
+    default = SoulConfig(queen_id=queen_id)
+
+    def count(value: Any, fallback: int, *, low: int = 1, high: int | None = None) -> int:
+        ok = isinstance(value, int) and not isinstance(value, bool) and value >= low and (high is None or value <= high)
+        return value if ok else fallback
+
+    def patterns(key: str) -> tuple[str, ...]:
+        value = raw.get(key)
+        return tuple(str(v) for v in value if isinstance(v, str) and v) if isinstance(value, list) else ()
+
+    sections: list[SoulSection] = []
+    for entry in raw.get("sections") or []:
+        if not isinstance(entry, dict) or not str(entry.get("key") or "").strip() or not str(entry.get("title") or "").strip():
+            continue
+        max_age = entry.get("max_age_days")
+        sections.append(
+            SoulSection(
+                key=str(entry["key"]).strip(),
+                title=str(entry["title"]).strip(),
+                limit=count(entry.get("limit"), 400),
+                max_age_days=max_age if isinstance(max_age, int) and not isinstance(max_age, bool) and max_age >= 1 else None,
+                evidence=count(entry.get("evidence"), 1),
+            )
+        )
+    keys = [s.key for s in sections]
+    sources = raw.get("sources") if isinstance(raw.get("sources"), dict) else {}
+    return SoulConfig(
+        queen_id=queen_id,
+        mode=raw.get("mode") if raw.get("mode") in ("review", "auto") else default.mode,
+        hour=count(raw.get("hour"), default.hour, low=0, high=23),
+        model=raw.get("model") if raw.get("model") in ("queen", "worker") else default.model,
+        max_edits=count(raw.get("max_edits"), default.max_edits),
+        bootstrap_edits=count(raw.get("bootstrap_edits"), default.bootstrap_edits),
+        include_titles=patterns("include_titles"),
+        exclude_titles=patterns("exclude_titles"),
+        source_file=str(sources.get("file") or "") or None,
+        source_keys=tuple(str(k) for k in sources.get("keys") or [] if isinstance(k, str) and k),
+        bootstrap_memories=patterns("bootstrap_memories"),
+        sections=tuple(sections) if sections and len(set(keys)) == len(keys) else default.sections,
+        header=str(raw.get("header") or default.header),
+        session_chars=count(raw.get("session_chars"), default.session_chars),
+        message_chars=count(raw.get("message_chars"), default.message_chars),
+    )
+
+
 def get_memory_timeline_enabled() -> bool:
     """Return whether queens keep a dated timeline of what the user mentions.
 

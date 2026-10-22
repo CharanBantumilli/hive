@@ -402,10 +402,11 @@ class QueenPhaseState:
     def get_static_prompt(self) -> str:
         """Return the stable portion of the system prompt for the current phase.
 
-        Includes identity, phase-role prompt, connected-integrations block, and
-        default skill protocols. These change only on phase transition, queen
-        identity selection, or when the user adds/removes an integration — rare
-        events. Designed to be byte-stable across AgentLoop iterations within a
+        Includes identity, her soul (``framework.agents.queen.soul``), phase-role
+        prompt, connected-integrations block, and default skill protocols. These
+        change only on phase transition, queen identity selection, a new soul
+        version (at most daily), or when the user adds/removes an integration —
+        rare events. Designed to be byte-stable across AgentLoop iterations within a
         single user turn so that Anthropic's prompt cache keeps this block warm.
 
         Three surfaces deliberately do NOT live here — they are delivered as
@@ -426,6 +427,13 @@ class QueenPhaseState:
         parts = []
         if self.queen_identity_prompt:
             parts.append(self.queen_identity_prompt)
+        # Her soul: what she has written about herself, right under who she is.
+        # It changes at most once a day, so the cached prefix stays warm.
+        from framework.agents.queen.soul import prompt_for as soul_prompt
+
+        soul = soul_prompt(self.queen_id)
+        if soul:
+            parts.append(soul)
         parts.append(base)
         credentials_block = _render_credentials_block(self.credentials_prompt_provider)
         if credentials_block:
