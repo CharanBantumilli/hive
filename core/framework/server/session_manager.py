@@ -862,6 +862,13 @@ class SessionManager:
                         exc_info=True,
                     )
         if _colony_session_id:
+            if queen_resume_from and queen_resume_from != _colony_session_id:
+                # The caller asked for another session (e.g. the queen DM page,
+                # resuming the DM that spawned this colony, sends "independent").
+                # Its phase was meant for that session; this colony's own
+                # session keeps the phase it saved, or it would wake up without
+                # its colony tools (run_worker, triggers, the tracker).
+                initial_phase = None
             queen_resume_from = _colony_session_id
 
         # When cold-restoring, check meta.json for the phase — if the

@@ -541,10 +541,12 @@ async def handle_queen_session(request: web.Request) -> web.Response:
                         meta = json.loads(meta_path.read_text(encoding="utf-8"))
                     except (json.JSONDecodeError, OSError):
                         meta = {}
-                # Skip colony-fork duplicates and sessions retired by a
-                # task_create(new_session=true) fork — the successor
-                # session is the one to resume.
-                if meta.get("colony_fork") or meta.get("superseded_by") or meta.get("channel"):
+                # Skip colony-fork duplicates, sessions retired by a
+                # task_create(new_session=true) fork (the successor session is
+                # the one to resume), and a DM that became a colony: it is
+                # locked, and its agent_path would open the colony's own session
+                # here as if it were this queen's DM.
+                if meta.get("colony_fork") or meta.get("superseded_by") or meta.get("colony_spawned") or meta.get("channel"):
                     continue
                 resume_from = candidate.name
                 break
