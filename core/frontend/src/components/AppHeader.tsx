@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { apiUrl } from "@/api/client";
 import { useColony } from "@/context/ColonyContext";
 import { useHeaderActions } from "@/context/HeaderActionsContext";
@@ -87,12 +87,9 @@ function UserMenu({
   );
 }
 
-interface AppHeaderProps {
-  onOpenQueenProfile?: (queenId: string) => void;
-}
-
-export default function AppHeader({ onOpenQueenProfile }: AppHeaderProps) {
+export default function AppHeader() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { colonies, queens, queenProfiles, userProfile, userAvatarVersion, userHasAvatar } = useColony();
   const { actions, leftActions } = useHeaderActions();
   const { currentModel, currentProvider, availableModels, activeSubscription, subscriptions } = useModel();
@@ -122,7 +119,7 @@ export default function AppHeader({ onOpenQueenProfile }: AppHeaderProps) {
 
   // Derive page title + icon from current route
   const colonyMatch = location.pathname.match(/^\/colony\/(.+)/);
-  const queenMatch = location.pathname.match(/^\/queen\/(.+)/);
+  const queenMatch = location.pathname.match(/^\/queen\/([^/]+)(\/profile)?$/);
 
   let title = "OpenHive";
   let icon: React.ReactNode = null;
@@ -150,8 +147,8 @@ export default function AppHeader({ onOpenQueenProfile }: AppHeaderProps) {
     title = profile?.name ?? queen?.name ?? queenInfo.name;
     queenTitle = profile?.title ?? queen?.role ?? queenInfo.role;
     icon = <Crown className="w-4 h-4 text-primary" />;
-    // Only enable the profile popup when we have a real profile to show.
-    if (profile) queenIdForProfile = profile.id;
+    // Her name links to her profile page, when she has one and it isn't the page shown.
+    if (profile && !queenMatch[2]) queenIdForProfile = profile.id;
   }
 
   // Profile initials
@@ -182,7 +179,7 @@ export default function AppHeader({ onOpenQueenProfile }: AppHeaderProps) {
           {icon ? (
             queenIdForProfile ? (
               <button
-                onClick={() => onOpenQueenProfile?.(queenIdForProfile!)}
+                onClick={() => navigate(`/queen/${queenIdForProfile}/profile`)}
                 className="flex items-center gap-2 rounded-md px-1.5 -mx-1.5 py-0.5 hover:bg-muted/60 transition-colors"
                 title={`View ${title}'s profile`}
               >

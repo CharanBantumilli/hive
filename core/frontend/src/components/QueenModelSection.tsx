@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, Cpu, Loader2 } from "lucide-react";
 import { queensApi } from "@/api/queens";
 import { configApi, type LlmSection } from "@/api/config";
@@ -8,6 +8,7 @@ import { ApiError } from "@/api/client";
  * The queen's own model: a section in the main LLM slot's shape, stored under `queen_llm` in
  * configuration.json. Without one she uses the main model (Settings → AI Model). Like the
  * slot editor, it shows and saves the section verbatim, or copies a saved provider into it.
+ * Styled for her profile page (the `qp-` classes).
  */
 
 const TEMPLATE: LlmSection = {
@@ -22,7 +23,7 @@ function summary(s: LlmSection): string {
   return [s.model, s.api_base, key].filter(Boolean).join(" · ");
 }
 
-export default function QueenModelSection({ queenId }: { queenId: string }) {
+export default function QueenModelSection({ queenId, onChange }: { queenId: string; onChange?: (model: string) => void }) {
   const [section, setSection] = useState<LlmSection | null>(null);
   const [defaultModel, setDefaultModel] = useState<string>("");
   const [library, setLibrary] = useState<Record<string, LlmSection>>({});
@@ -31,6 +32,9 @@ export default function QueenModelSection({ queenId }: { queenId: string }) {
   const [error, setError] = useState<string | null>(null);
   // The JSON being edited; null = editor closed.
   const [text, setText] = useState<string | null>(null);
+  // Tells the caller the model she now speaks with; a ref, so a new callback doesn't reload.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -38,6 +42,7 @@ export default function QueenModelSection({ queenId }: { queenId: string }) {
       const [own, lib] = await Promise.all([queensApi.getLlm(queenId), configApi.getProviderLibrary()]);
       setSection(own.section);
       setDefaultModel(own.default_model ?? "");
+      onChangeRef.current?.(own.section?.model ?? own.default_model ?? "");
       setLibrary(lib.library);
       setError(null);
     } catch (e) {
@@ -55,6 +60,7 @@ export default function QueenModelSection({ queenId }: { queenId: string }) {
     try {
       const res = await queensApi.setLlm(queenId, next);
       setSection(res.section);
+      onChangeRef.current?.(res.section?.model ?? res.default_model ?? defaultModel);
       setText(null);
       setError(null);
     } catch (e) {
@@ -83,37 +89,39 @@ export default function QueenModelSection({ queenId }: { queenId: string }) {
   const names = Object.keys(library);
 
   return (
-    <div className="rounded-lg border border-border/60 px-3 py-2.5 text-sm">
+    <div className="qp-card px-5 py-4 text-sm">
       {loading ? (
-        <p className="text-muted-foreground inline-flex items-center gap-2">
+        <p className="qp-meta inline-flex items-center gap-2">
           <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…
         </p>
       ) : (
         <>
-          <div className="flex items-start gap-2">
-            <Cpu className="w-4 h-4 mt-0.5 text-muted-foreground flex-shrink-0" />
+          <div className="flex items-start gap-3">
+            <span className="qp-pillar-icon">
+              <Cpu className="w-4 h-4" />
+            </span>
             <div className="min-w-0 flex-1">
               {section ? (
-                <p className="text-foreground break-words">{summary(section)}</p>
+                <p className="text-[14px] text-foreground break-words">{summary(section)}</p>
               ) : (
-                <p className="text-foreground">
+                <p className="text-[14px] text-foreground break-words">
                   Main model <span className="text-muted-foreground">· {defaultModel || "AI Model → LLM"}</span>
                 </p>
               )}
-              <p className="text-[11px] text-muted-foreground">
+              <p className="mt-0.5 text-[12px] text-muted-foreground">
                 {section ? "Her own model. Her running chats use it now." : "She uses the main model from Settings → AI Model."}
               </p>
             </div>
           </div>
           {text === null ? (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+            <div className="mt-4 flex flex-wrap items-center gap-2">
               {names.length > 0 && (
                 <select
                   aria-label="Use a saved provider"
                   value=""
                   disabled={busy}
                   onChange={(e) => e.target.value && void save(library[e.target.value])}
-                  className="text-[11px] rounded-md border border-border/60 bg-background text-muted-foreground px-1.5 py-1 outline-none focus:border-primary/50"
+                  className="qp-input !w-auto !py-1 text-[12px] text-muted-foreground"
                 >
                   <option value="">Use a saved provider…</option>
                   {names.map((n) => (
@@ -129,55 +137,53 @@ export default function QueenModelSection({ queenId }: { queenId: string }) {
                   setText(JSON.stringify(section ?? TEMPLATE, null, 2));
                 }}
                 disabled={busy}
-                className="text-[11px] font-medium px-2 py-1 rounded-md border border-primary/30 text-primary hover:bg-primary/10 transition-colors"
+                className="qp-btn"
+                data-size="sm"
               >
                 {section ? "Edit" : "Set her own model"}
               </button>
               {section && (
-                <button
-                  onClick={() => void save(null)}
-                  disabled={busy}
-                  className="text-[11px] font-medium px-2 py-1 rounded-md border border-border/60 text-muted-foreground hover:text-foreground transition-colors"
-                >
+                <button onClick={() => void save(null)} disabled={busy} className="qp-btn" data-tone="quiet" data-size="sm">
                   Use the main model
                 </button>
               )}
               {busy && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
             </div>
           ) : (
-            <div className="mt-2">
+            <div className="mt-4">
               <textarea
                 aria-label="Her model, as JSON"
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 rows={8}
                 spellCheck={false}
-                className="w-full rounded-md border border-border/60 bg-background px-2.5 py-2 text-[11.5px] font-mono text-foreground outline-none focus:border-primary/50 resize-y"
+                className="qp-editor"
               />
-              <div className="mt-2 flex items-center justify-end gap-2">
-                <button
-                  onClick={() => {
-                    setText(null);
-                    setError(null);
-                  }}
-                  className="text-[11px] font-medium px-2.5 py-1.5 rounded-md border border-border/60 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={saveText}
-                  disabled={busy}
-                  className="text-[11px] font-medium px-2.5 py-1.5 rounded-md bg-primary text-primary-foreground disabled:opacity-50 inline-flex items-center gap-1"
-                >
-                  {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                  Save
-                </button>
+              <div className="qp-edit-foot">
+                <span />
+                <div>
+                  <button
+                    onClick={() => {
+                      setText(null);
+                      setError(null);
+                    }}
+                    className="qp-btn"
+                    data-tone="quiet"
+                    data-size="sm"
+                  >
+                    Cancel
+                  </button>
+                  <button onClick={saveText} disabled={busy} className="qp-btn" data-tone="primary" data-size="sm">
+                    {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                    Save
+                  </button>
+                </div>
               </div>
             </div>
           )}
           {error && (
-            <p className="mt-1.5 text-[11px] text-red-500 inline-flex items-start gap-1">
-              <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" /> {error}
+            <p className="qp-error mt-2">
+              <AlertCircle className="w-3.5 h-3.5" /> {error}
             </p>
           )}
         </>

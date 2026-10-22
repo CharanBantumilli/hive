@@ -44,7 +44,7 @@ same shape:
 }
 ```
 
-Set it in the dashboard from her profile (Org Chart → her card → Model): pick a saved provider,
+Set it in the dashboard on her profile page (her card in the Org Chart, or her name above her chat → Mind): pick a saved provider,
 edit the section, or go back to the main model. Her running chats switch on their next model call,
 her context window follows her model, and changing the main model leaves her on hers. The key can
 be literal, `api_key_env_var` or in the credential store; the subscription logins (Claude Code,
@@ -87,6 +87,62 @@ model:
 
 A context compaction also tidies her memory, and ending a session reflects once more if anything was
 said since the last reflection.
+
+### A queen's soul
+
+Her profile says who she is meant to be and her memory holds what she knows. Her soul is what she has
+become: a short, first-person record she writes herself, in sections such as what is on her mind, how she
+stands with particular people, what she promised, what she thinks and why, and how she has changed. It rides
+her system prompt right after her identity, so it is the same self in every chat.
+
+Once a day, after `hour`, she reads what was said in her chats since the last time and proposes a few changes
+in her own voice. Every change must quote, word for word, what she read; sections with `"evidence": 2` need
+quotes from two different people or chats; at most `max_edits` changes a day; no section may go over its
+`limit` (characters); items in a section with `max_age_days` drop out when they get older than that. In
+`"review"` mode the changes wait for you on her profile page (→ Soul), where you approve them
+one by one, edit the soul by hand, or restore an earlier version; while a proposal waits, the next reflection
+holds off. In `"auto"` mode they apply at once.
+
+```json
+"soul": {
+  "queens": {
+    "queen_archivist": {
+      "enabled": true,
+      "mode": "review",
+      "hour": 4,
+      "sources": {"file": "channels/onebot/sessions.json", "keys": ["/group/"]},
+      "bootstrap_memories": ["archivist-personality.md"],
+      "header": "These are your own notes about yourself. Your identity above comes first.",
+      "sections": [
+        {"key": "now", "title": "Now", "limit": 300, "max_age_days": 14},
+        {"key": "people", "title": "Me and them", "limit": 800, "evidence": 2}
+      ]
+    }
+  }
+}
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `mode` | `"review"` | `"review"`: changes wait for approval; `"auto"`: they apply at once |
+| `hour` | `4` | Local hour after which the daily reflection runs |
+| `model` | `"queen"` | `"queen"`: her own model, else the main one; `"worker"`: the `worker_llm` model |
+| `max_edits`, `bootstrap_edits` | `5`, `30` | Changes a daily reflection, and the first draft, may make |
+| `sources` | none | A channel's chat → session map and patterns for its keys: only those chats are read (here, group chats, not private ones: her soul shows in every chat) |
+| `include_titles`, `exclude_titles` | none | Patterns for session titles to read, or to skip |
+| `bootstrap_memories` | none | Memory files of hers the first draft reads |
+| `sections` | now, people, threads, views, changes | Each `key`, `title`, `limit`, and optionally `max_age_days` and `evidence` |
+| `session_chars`, `message_chars` | `12000`, `400` | How much of one chat, and of one message, a reflection reads |
+
+Write the first draft from the dashboard ("Write the first draft"). Everything lives in `queens/<id>/soul/`:
+`soul.json` (current), `history/` (every version), `proposals/`, `log.jsonl` and `state.json` (what each chat
+was read up to).
+
+To see whether a proposal changes how she sounds, list a few fixed questions in `queens/<id>/soul/probes.json`,
+each with an optional anchor (a reply of hers that sounds most like her):
+`[{"q": "[Ann(42)]: are you in a good mood today?", "anchor": "..."}]`. "Try her with these changes" on the
+waiting proposal answers each one twice on her model, with her soul as it is and as the proposal would make
+it, and shows the answers side by side.
 
 ## Environment Variables
 

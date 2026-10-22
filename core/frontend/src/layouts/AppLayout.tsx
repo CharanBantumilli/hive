@@ -5,17 +5,16 @@ import {
   Suspense,
   type ReactNode,
 } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import AppHeader from "@/components/AppHeader";
-import QueenProfilePanel from "@/components/QueenProfilePanel";
 import ColonyPanel from "@/components/ColonyPanel";
 import RuntimeLogsDrawer from "@/components/RuntimeLogsDrawer";
 import ConnectivityBanner from "@/components/ConnectivityBanner";
 import DebugPanel from "@/components/DebugPanel";
 import { DebugStateProvider } from "@/components/DebugStateContext";
-import { ColonyProvider, useColony } from "@/context/ColonyContext";
+import { ColonyProvider } from "@/context/ColonyContext";
 import { HeaderActionsProvider } from "@/context/HeaderActionsContext";
 import { QueenProfileProvider } from "@/context/QueenProfileContext";
 import { SessionUsageProvider } from "@/context/SessionUsageContext";
@@ -66,11 +65,9 @@ export default function AppLayout() {
 }
 
 function AppLayoutInner() {
-  const { colonies } = useColony();
-  const location = useLocation();
+  const navigate = useNavigate();
   const { openPrompt } = useQueensAuthorizationPrompt();
   const { openPrompt: openDisconnectPrompt } = useQueenDisconnectPrompt();
-  const [openQueenId, setOpenQueenId] = useState<string | null>(null);
 
   // Whenever any tab/window finishes connecting an OAuth provider, pop
   // the queens-authorization dialog so the user can untick queens that
@@ -161,15 +158,10 @@ function AppLayoutInner() {
     };
   }, []);
 
-  // Queen profile closes on route change (it's a per-queen view).
-  useEffect(() => {
-    setOpenQueenId(null);
-  }, [location.pathname]);
-
+  // A queen's profile is a page of its own.
   const handleOpenQueenProfile = useCallback(
-    (queenId: string) =>
-      setOpenQueenId((prev) => (prev === queenId ? null : queenId)),
-    [],
+    (queenId: string) => navigate(`/queen/${queenId}/profile`),
+    [navigate],
   );
 
   return (
@@ -178,28 +170,13 @@ function AppLayoutInner() {
         {/* Single first-run orchestrator: seeds the demo colony + auto-plays
             the tour. Inside TutorialProvider so it can drive the tour. */}
         <NewUserOnboarding />
-        <LayoutShell
-          openQueenId={openQueenId}
-          onCloseQueenProfile={() => setOpenQueenId(null)}
-          onOpenQueenProfile={handleOpenQueenProfile}
-          colonies={colonies}
-        />
+        <LayoutShell />
       </TutorialProvider>
     </QueenProfileProvider>
   );
 }
 
-function LayoutShell({
-  openQueenId,
-  onCloseQueenProfile,
-  onOpenQueenProfile,
-  colonies,
-}: {
-  openQueenId: string | null;
-  onCloseQueenProfile: () => void;
-  onOpenQueenProfile: (queenId: string) => void;
-  colonies: ReturnType<typeof useColony>["colonies"];
-}) {
+function LayoutShell() {
   const { sessionId, colonyName, dismissed } = useColonyWorkers();
   // Workers panel is colony-only — queen-DM publishes a sessionId for
   // its own Action Plan drawer, but the workers panel must stay hidden
@@ -225,7 +202,7 @@ function LayoutShell({
       <ConnectivityBanner />
       <Sidebar />
       <div className="flex-1 min-w-0 flex flex-col">
-        <AppHeader onOpenQueenProfile={onOpenQueenProfile} />
+        <AppHeader />
         {/* data-tour anchor: the onboarding tour measures this content region
             to render its scripted colony demo edge-to-edge, keeping the real
             sidebar + header visible around it. */}
@@ -244,15 +221,6 @@ function LayoutShell({
               <Outlet />
             </Suspense>
           </main>
-          {openQueenId && (
-            <QueenProfilePanel
-              queenId={openQueenId}
-              colonies={colonies.filter(
-                (c) => c.queenProfileId === openQueenId,
-              )}
-              onClose={onCloseQueenProfile}
-            />
-          )}
           {showWorkersPanel && sessionId && (
             <ColonyPanel
               sessionId={sessionId}

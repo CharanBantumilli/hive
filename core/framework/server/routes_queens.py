@@ -15,6 +15,7 @@
 import json
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -28,7 +29,9 @@ from framework.agents.queen.queen_profiles import (
     default_profile_persona,
     ensure_default_queens,
     list_queens,
+    list_removed_queens,
     load_queen_profile,
+    set_queen_removed,
     update_queen_profile,
 )
 from framework.cloud_sync_hooks import schedule_push
@@ -121,6 +124,29 @@ async def handle_list_profiles(request: web.Request) -> web.Response:
     ensure_default_queens()
     queens = list_queens()
     return web.json_response({"queens": queens})
+
+
+async def handle_list_removed(request: web.Request) -> web.Response:
+    """GET /api/queen/removed — the queens taken out of the catalog, to put back."""
+    return web.json_response({"queens": list_removed_queens()})
+
+
+async def handle_remove_queen(request: web.Request) -> web.Response:
+    """POST /api/queen/{queen_id}/remove — take her out of the catalog. Her files stay, for a restore."""
+    return _set_removed(request.match_info["queen_id"], True)
+
+
+async def handle_restore_queen(request: web.Request) -> web.Response:
+    """POST /api/queen/{queen_id}/restore — put a removed queen back in the catalog, as she was."""
+    return _set_removed(request.match_info["queen_id"], False)
+
+
+def _set_removed(queen_id: str, removed: bool) -> web.Response:
+    try:
+        set_queen_removed(queen_id, removed)
+    except FileNotFoundError:
+        return web.json_response({"error": f"Queen '{queen_id}' not found"}, status=404)
+    return web.json_response({"queen_id": queen_id, "removed": removed})
 
 
 async def handle_create_queen(request: web.Request) -> web.Response:
@@ -383,6 +409,114 @@ async def handle_update_profile(request: web.Request) -> web.Response:
     await _refresh_live_queen_identity(request.app["manager"], queen_id, updated)
     api_profile = _transform_profile_for_api(updated)
     return web.json_response({"id": queen_id, "has_avatar": _has_avatar(queen_id), **api_profile})
+
+
+def _persona_view(profile: dict[str, Any]) -> dict[str, Any]:
+    from framework.agents.queen.queen_profiles import PERSONA_FIELDS
+
+    return {k: profile[k] for k in PERSONA_FIELDS if k in profile}
+
+
+def _persona_problem(fields: dict[str, Any]) -> str:
+    """Why these persona fields can't be saved, or ""."""
+    from framework.agents.queen.queen_profiles import PERSONA_MAP_FIELDS, PERSONA_TEXT_FIELDS
+
+    for key, value in fields.items():
+        if key in PERSONA_TEXT_FIELDS:
+            if not isinstance(value, str):
+                return f"'{key}' must be text"
+            if key in ("name", "title") and not value.strip():
+                return f"'{key}' can't be empty"
+        elif key in PERSONA_MAP_FIELDS:
+            if value is not None and not (isinstance(value, dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in value.items())):
+                return f"'{key}' must map names to text"
+        elif key == "behavior_triggers":
+            # The identity prompt reads each item's trigger and reaction.
+            if value is not None and not (
+                isinstance(value, list)
+                and all(isinstance(t, dict) and isinstance(t.get("trigger"), str) and isinstance(t.get("reaction"), str) for t in value)
+            ):
+                return "'behavior_triggers' must be a list of {trigger, reaction} texts"
+        else:
+            return f"Unknown persona field '{key}'"
+    return ""
+
+
+async def handle_get_persona(request: web.Request) -> web.Response:
+    """GET /api/queen/{queen_id}/persona — her persona fields as profile.yaml holds them."""
+    queen_id = request.match_info["queen_id"]
+    try:
+        profile = load_queen_profile(queen_id)
+    except FileNotFoundError:
+        return web.json_response({"error": f"Queen '{queen_id}' not found"}, status=404)
+    return web.json_response({"queen_id": queen_id, "persona": _persona_view(profile)})
+
+
+async def handle_put_persona(request: web.Request) -> web.Response:
+    """PUT /api/queen/{queen_id}/persona — replace persona fields whole: ``{"persona": {field: value}}``.
+
+    Text fields (name, title, core_traits, skills), maps of text (hidden_background, psychological_profile,
+    world_lore) and behavior_triggers, a list of ``{trigger, reaction}``; ``null`` removes a map or the list.
+    The file as it was goes to ``_profile_snapshots/``, and her running sessions take the new persona on their
+    next turn.
+    """
+    from framework.agents.queen.queen_profiles import replace_queen_persona
+
+    queen_id = request.match_info["queen_id"]
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "Invalid JSON body"}, status=400)
+    fields = body.get("persona") if isinstance(body, dict) else None
+    if not isinstance(fields, dict) or not fields:
+        return web.json_response({"error": "Body must be {'persona': {field: value}}"}, status=400)
+    problem = _persona_problem(fields)
+    if problem:
+        return web.json_response({"error": problem}, status=400)
+    try:
+        updated = replace_queen_persona(queen_id, fields)
+    except FileNotFoundError:
+        return web.json_response({"error": f"Queen '{queen_id}' not found"}, status=404)
+    schedule_push("queen_profile", queen_id)
+    await _refresh_live_queen_identity(request.app["manager"], queen_id, updated)
+    return web.json_response({"queen_id": queen_id, "persona": _persona_view(updated)})
+
+
+async def handle_get_overview(request: web.Request) -> web.Response:
+    """GET /api/queen/{queen_id}/overview — what her profile page counts.
+
+    Her memories (by type, and the most she keeps), her sessions, and when she was last active.
+    """
+    from collections import Counter
+    from datetime import datetime
+
+    from framework.agents.queen.queen_memory_v2 import MAX_FILES, queen_memory_dir, scan_memory_files
+
+    queen_id = request.match_info["queen_id"]
+    try:
+        load_queen_profile(queen_id)
+    except FileNotFoundError:
+        return web.json_response({"error": f"Queen '{queen_id}' not found"}, status=404)
+    memories = scan_memory_files(queen_memory_dir(queen_id))
+    root = QUEENS_DIR / queen_id / "sessions"
+    sessions = [d for d in root.iterdir() if d.is_dir()] if root.is_dir() else []
+    started = sorted(m.group(1) for d in sessions if (m := re.match(r"session_(\d{8})_", d.name)))
+    active = [(d / "events.jsonl").stat().st_mtime for d in sessions if (d / "events.jsonl").is_file()]
+    return web.json_response(
+        {
+            "queen_id": queen_id,
+            "memory": {
+                "count": len(memories),
+                "limit": MAX_FILES,
+                "by_type": dict(Counter((m.type or "other") for m in memories)),
+            },
+            "sessions": {
+                "count": len(sessions),
+                "first": f"{started[0][:4]}-{started[0][4:6]}-{started[0][6:]}" if started else None,
+                "last_active": datetime.fromtimestamp(max(active)).astimezone().isoformat(timespec="minutes") if active else None,
+            },
+        }
+    )
 
 
 async def handle_initialize_preferences(request: web.Request) -> web.Response:
@@ -908,7 +1042,13 @@ def register_routes(app: web.Application) -> None:
     app.router.add_patch("/api/queen/{queen_id}/profile", handle_update_profile)
     app.router.add_get("/api/queen/{queen_id}/llm", handle_get_queen_llm)
     app.router.add_put("/api/queen/{queen_id}/llm", handle_put_queen_llm)
+    app.router.add_get("/api/queen/{queen_id}/persona", handle_get_persona)
+    app.router.add_put("/api/queen/{queen_id}/persona", handle_put_persona)
+    app.router.add_get("/api/queen/{queen_id}/overview", handle_get_overview)
     app.router.add_post("/api/queen/create", handle_create_queen)
+    app.router.add_get("/api/queen/removed", handle_list_removed)
+    app.router.add_post("/api/queen/{queen_id}/remove", handle_remove_queen)
+    app.router.add_post("/api/queen/{queen_id}/restore", handle_restore_queen)
     app.router.add_post("/api/queen/initialize-preferences", handle_initialize_preferences)
     app.router.add_post("/api/queen/{queen_id}/avatar", handle_upload_avatar)
     app.router.add_get("/api/queen/{queen_id}/avatar", handle_get_avatar)

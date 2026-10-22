@@ -274,8 +274,8 @@ export default function ColonyChat() {
   const llmReady = canMakeLLMCalls(me);
 
   // Route state from home page (new chat flow) or a colony-create entry point.
-  // `prompt` is the queen-DM new-chat seed; `initialGoal` is set by the three
-  // colony-create callers (QueenProfilePanel, Sidebar, queen-dm clone) so we
+  // `prompt` is the queen-DM new-chat seed; `initialGoal` is set by the
+  // colony-create callers (Sidebar, queen-dm clone) so we
   // know the queen is about to process an auto-posted first user message and
   // should show the typing indicator immediately — no execution_started yet.
   const routeState = (location.state || {}) as {
