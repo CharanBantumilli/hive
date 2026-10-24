@@ -2,6 +2,10 @@
 
 > Full, detailed release notes live in [`docs/releases/`](docs/releases/). The entries below summarize the architecturally significant releases; older entries follow.
 
+## v1.0.12 — A Soul of Her Own
+
+**New:** a queen keeps a soul, a short first-person record of who she has become, which she revises once a day from her chats and you approve change by change (`soul.queens.<id>`); her profile is a page of her own, where her persona is edited chapter by chapter; the org chart's positions can be added, removed and restored. **Changed:** a queen you made is on the team from the start. **Fixed:** a colony's queen no longer wakes up without her colony tools after her DM page is opened; a test run can no longer write into a real Hive home. See [docs/releases/v1.0.12.md](docs/releases/v1.0.12.md).
+
 ## v1.0.11 — MCP from the Terminal
 
 **New:** agents can run an MCP server from the terminal (`hive mcp add --as-cli`, then `hive mcp run <server> ...`) instead of carrying its tools in every prompt, through [mcp2cli](https://github.com/knowsuchagency/mcp2cli) by Stephan Fitzpatrick (MIT); `worker_llm` and each queen's own model take `extra_body`. **Changed:** queens reflect on memory every few replies, not after every model call. **Fixed:** MCP servers on another Python version no longer crash when Hive runs from a uv-made virtualenv on Windows; Hive moved off the retired `claude-sonnet-4-20250514` (thanks, Omar Shalaby). See [docs/releases/v1.0.11.md](docs/releases/v1.0.11.md).
