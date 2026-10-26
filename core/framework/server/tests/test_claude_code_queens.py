@@ -190,6 +190,8 @@ async def test_she_writes_to_a_hive_queen_and_her_answer_comes_back_to_the_conve
 
     assert _runs(fake)[1]["prompt"].splitlines()[-1] == "[Ivy(queen_ivy)]: Not yet."
     assert _told(ava)[1] == "[Claude(queen_claude)]: Ivy says the east shore is unmapped."
+    # A hop is logged once its delivery returns, a moment after the queen is handed the words.
+    await _until(lambda: len(_log()) == 5)
     hops = [(h["kind"], h["from"], h["to"], h["depth"]) for h in _log()]
     assert hops == [
         ("message", AVA, CLAUDE, 1),
