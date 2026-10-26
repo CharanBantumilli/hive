@@ -1417,6 +1417,17 @@ async def fork_queen_session_for_split(
     # always carries a plan; the HTTP compact-and-fork path never does.
     handoff_mode = bool(tasks)
 
+    # A chat app's thread (a QQ group, say) is one long conversation, and the channel would follow
+    # the queen into a session carrying only her handoff: everything said there so far would be lost.
+    # Her plan belongs in the session the thread is in.
+    if handoff_mode and getattr(session, "channel", None):
+        raise ForkSessionError(
+            f"This conversation comes from the {session.channel} chat channel and stays in this session: "
+            "a new one would leave behind everything said here. Create the plan in this session "
+            "(task_create without new_session).",
+            status=409,
+        )
+
     # The queen context (and its LLM) is only needed to compact — i.e.
     # the HTTP path. The handoff path writes a queen-authored brief and
     # never touches an LLM, so it does not require a running queen ctx.
