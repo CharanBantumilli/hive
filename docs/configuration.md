@@ -144,6 +144,108 @@ each with an optional anchor (a reply of hers that sounds most like her):
 waiting proposal answers each one twice on her model, with her soul as it is and as the proposal would make
 it, and shows the answers side by side.
 
+### Queens writing to each other
+
+With `queen_mail` on, a queen can write to another: `list_queens` names the queens she can write to and
+`message_queen` sends a letter. The call returns once the letter is handed over (when the other queen has to start
+first, that can take a few seconds); her answer comes later. The letter arrives in a session of the other queen's
+kept for that writer (the same one every time, named after the writer in her session list), as
+`[Ava(queen_ava)]: ...`, the way a chat app's message does, so her memory and soul credit the writer. What she
+says there goes back the same way and wakes the writer: to the session of the letter her turn answers, or else the
+session the writer last wrote from. To go on, the writer writes again. Her questions, the files she attaches and a
+reply that fails are passed back too. This holds across restarts: when her session comes back, so does the way back.
+
+```json
+"queen_mail": {"enabled": true, "queens": ["queen_ava", "queen_ivy"], "daily_limit": 100, "max_depth": 8}
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `false` | Whether queens get `list_queens` and `message_queen` |
+| `queens` | every queen | The queens who write and are written to. Without it, every queen not removed from the catalog |
+| `daily_limit` | `100` | Letters one queen may send in a day (replies don't count) |
+| `max_depth` | `8` | Hops in one chain, below |
+| `max_parallel_turns` | `2` | Turns of queens run by Claude Code (below) that may run at once |
+
+**Chains.** A letter or a reply is one hop deeper than the deepest letter or reply that entered its conversation
+since anyone else last spoke there. A message from anyone else (you, a chat app), a timer that fires or a worker's
+report starts a new chain; a conversation that moves on to a new session keeps its chain. The hop past
+`max_depth` isn't made: a letter is refused with the reason, a reply is dropped. Two queens answering each other
+go round at most `max_depth` times this way, however they got there.
+
+Every hop is a line of `queens/mail.jsonl`: `id`, `at`, `kind` (`message` or `reply`), `from`, `to`, both
+sessions, `caused_by` (the hop that set it off), `depth`, `chars`, and `dropped` when it wasn't delivered (past
+`max_depth`, queen mail turned off, or the writer's session gone or locked). The text stays in the sessions.
+The tools appear in sessions started or resumed after `queen_mail` changes; `message_queen` names the queens a
+queen can write to as her session starts.
+
+#### A queen run by Claude Code
+
+A queen under `queen_mail.claude_code` is [Claude Code](https://docs.claude.com/en/docs/claude-code/overview)
+itself, with all its tools, taking part in queen mail. The other queens find her with `list_queens`. A letter to
+her runs a turn of Claude Code (`claude -p`) in a conversation of hers kept for that writer, resumed every time, so
+she remembers each correspondent; letters that arrive while a turn runs go in together as the next one. What she
+ends a turn with goes back to the writer, to the session of the newest letter it answers. She writes to the other
+queens herself with `list_queens` and `message_queen` from a `hive` MCP server each of her runs gets, and their
+answers come back into the conversation she wrote from. The dashboard shows her on the org chart (a dashed card);
+opening it shows, read only, what was said and done in each of her conversations. She has no chat of her own there
+and isn't in the sidebar.
+
+She needs [Claude Code](https://docs.claude.com/en/docs/claude-code/setup) installed where `hive serve` runs,
+and an [Anthropic API key](https://console.anthropic.com/settings/keys).
+
+```json
+"queen_mail": {
+  "enabled": true,
+  "queens": ["queen_ava", "queen_ivy"],
+  "claude_code": {
+    "queen_claude": {"name": "Claude", "api_key": "sk-ant-...", "permission_mode": "acceptEdits"}
+  }
+}
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `name`, `title` | the id, `"Claude Code"` | What the other queens see in `list_queens` |
+| `command` | `"claude"` | The Claude Code program: a path, or a list with arguments to put before Hive's |
+| `auth` | `"api_key"` | How she pays: `"api_key"`, or `"subscription"` (below, at your own risk) |
+| `api_key` | none | The Anthropic API key her runs use. Without it (and without `"auth": "subscription"`) she doesn't run, and a queen who writes to her is told why |
+| `api_base` | none | `ANTHROPIC_BASE_URL` for her runs, for a gateway in front of the API |
+| `config_dir` | `HIVE_HOME/claude_code/<id>/config` | Her `CLAUDE_CONFIG_DIR`: her settings and sessions, and her sign-in on a subscription |
+| `cwd` | `HIVE_HOME/claude_code/<id>/workspace` | The folder she works in |
+| `permission_mode` | `"default"` | Passed to `--permission-mode`. In a run nobody watches, `"default"` refuses every tool that would ask first; `"bypassPermissions"` lets her do anything |
+| `allowed_tools`, `disallowed_tools`, `add_dirs` | none | Passed to `--allowedTools`, `--disallowedTools`, `--add-dir` |
+| `model` | her default | Passed to `--model` |
+| `timeout_minutes` | `30` | The longest one turn may run. Past it the turn, and everything it started, is stopped and the writer is told her reply failed |
+| `system_prompt` | none | Added to her system prompt (`--append-system-prompt`), after Hive's note on how letters reach her and where her answers go |
+| `env` | none | Environment variables for her runs, e.g. `CLAUDE_CODE_GIT_BASH_PATH` on Windows |
+
+Her runs inherit only what a program needs from Hive's environment (paths, locale, temp folders, proxies), never
+Hive's own secrets: not its credential key, provider keys, cloud credentials or tokens. She pays with her own
+`api_key`, never with a key Hive happens to hold; anything else she needs goes in `env`. Her settings and sessions
+stay in her own config folder, apart from yours. Her conversations, and where each one's answers go, are in
+`HIVE_HOME/claude_code/<id>/conversations.json`. The token her `hive` MCP server writes with is good for that
+one conversation, sits in a file only its owner can read, and is deleted when the run ends. Letters waiting for
+her next turn are held in memory: when Hive stops, they are dropped, and the writer isn't told.
+
+**A Claude subscription, at your own risk.** With `"auth": "subscription"`, she runs on the Claude plan signed in
+in her config folder instead, and `api_key` is ignored. Sign in there once, in a terminal:
+
+```powershell
+$env:CLAUDE_CONFIG_DIR = "<HIVE_HOME>\claude_code\queen_claude\config"; claude   # then /login
+```
+
+Running a plan unattended, on behalf of other agents, may go against the terms of the plan, and Anthropic may
+limit or close the account. Hive does this only because you chose it in so many words, logs a warning when she
+first runs, and marks her as such in the dashboard. Whether it is allowed is between you and Anthropic, and
+what follows from it is yours alone: the API key is the supported way.
+
+Mind what she can reach. A queen who talks with strangers in a chat app can pass their words on to her, so
+with `bypassPermissions` or Bash, a stranger is a few letters away from running commands on this computer,
+with the rights of the account `hive serve` runs as (as a Windows service under LocalSystem, that is SYSTEM).
+`queens`, `max_depth` and `daily_limit` narrow who reaches her and how often. Claude Code refuses
+`bypassPermissions` as root on Linux and macOS unless it is told it runs in a sandbox (`"env": {"IS_SANDBOX": "1"}`).
+
 ## Environment Variables
 
 ### LLM Providers (at least one required for real execution)

@@ -151,13 +151,23 @@ class ChannelHost:
             write_title(session.queen_dir, title, source="user")
         return session.id
 
-    async def send(self, session_id: str, text: str, *, images: Sequence[bytes] = (), display_text: str | None = None) -> str:
+    async def send(
+        self,
+        session_id: str,
+        text: str,
+        *,
+        images: Sequence[bytes] = (),
+        display_text: str | None = None,
+        correlation_id: str | None = None,
+    ) -> str:
         """Send a user message into a session, resuming it if it was stopped.
 
         ``images`` are image files' bytes; they are saved into the session like the
         dashboard's attachments. ``display_text`` is what the dashboard shows in place of
-        ``text``, when the two differ. Returns the id of the session that got the message,
-        which differs from ``session_id`` after the queen moved the conversation on.
+        ``text``, when the two differ. ``correlation_id`` marks the session's
+        ``client_input_received`` event for this message. Returns the id of the session that
+        got the message, which differs from ``session_id`` after the queen moved the
+        conversation on.
         """
         from framework.server.routes_execution import QueenUnavailableError, deliver_to_queen, prepare_queen_input
 
@@ -185,6 +195,7 @@ class ChannelHost:
                 image_content=blocks,
                 display_message=display_text,
                 saved_image_paths=saved,
+                correlation_id=correlation_id,
             )
         except QueenUnavailableError as e:
             raise ChannelError(f"The queen of session {session.id!r} can't be started") from e

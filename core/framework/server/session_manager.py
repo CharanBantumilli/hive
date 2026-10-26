@@ -18,13 +18,16 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from framework.config import COLONIES_DIR, QUEENS_DIR
 from framework.host.colony_binding import ColonyBinding
 from framework.host.triggers import TriggerDefinition
 from framework.server import boot_status
 from framework.utils.text import humanize_slug
+
+if TYPE_CHECKING:
+    from framework.server.queen_mail import QueenMail
 
 logger = logging.getLogger(__name__)
 
@@ -393,6 +396,8 @@ class SessionManager:
         # reflections) so they aren't garbage-collected before completion.
         self._background_tasks: set[asyncio.Task] = set()
         self._session_listeners: list[Callable[[Session], None]] = []
+        #: Letters between queens (framework.server.queen_mail); started with the server.
+        self.queen_mail: QueenMail | None = None
 
         # Run one-time v2 directory structure migration
         from framework.storage.migrate_v2 import run_migration as run_v2

@@ -256,7 +256,9 @@ _EXPECTED_DESKTOP_TOKEN: str | None = os.environ.get("HIVE_DESKTOP_TOKEN") or No
 
 @web.middleware
 async def desktop_auth_middleware(request: web.Request, handler):
-    if _EXPECTED_DESKTOP_TOKEN is None:
+    # A Claude Code queen's runs carry a token of their own conversation instead
+    # (framework.server.queen_mail), so the desktop's secret never has to be written down for them.
+    if _EXPECTED_DESKTOP_TOKEN is None or request.path.startswith("/api/queen-mail/"):
         return await handler(request)
     provided = request.headers.get("X-Hive-Token", "")
     if not hmac.compare_digest(provided, _EXPECTED_DESKTOP_TOKEN):
@@ -481,6 +483,8 @@ async def _on_shutdown(app: web.Application) -> None:
         if task is not None:
             task.cancel()
     manager: SessionManager = app["manager"]
+    if manager.queen_mail is not None:
+        manager.queen_mail.close()
     await manager.shutdown_all()
     await _reap_browser_contexts()
     # Tear down the request executor last: shutting it down before
@@ -554,6 +558,13 @@ async def start_soul_scheduler(app: web.Application) -> None:
     queens = soul_queens()
     if queens:
         logger.info("soul: daily reflection scheduled for %s", ", ".join(queens))
+
+
+async def start_queen_mail(app: web.Application) -> None:
+    """aiohttp on_startup hook: carry letters between queens. Their tools appear only while ``queen_mail`` is on."""
+    from framework.server.queen_mail import QueenMail
+
+    app["manager"].queen_mail = QueenMail(app["manager"])
 
 
 async def handle_health(request: web.Request) -> web.Response:
@@ -1065,6 +1076,8 @@ def create_app(model: str | None = None) -> web.Application:
     app.on_startup.append(start_resource_sampler)
     # Each queen with a soul revises it once a day; see framework.agents.queen.soul_reflection.
     app.on_startup.append(start_soul_scheduler)
+    # Letters between queens; see framework.server.queen_mail.
+    app.on_startup.append(start_queen_mail)
     app.on_shutdown.append(_on_shutdown)
     # Last-ditch browser cleanup for a non-graceful exit that skips on_shutdown.
     import atexit
@@ -1080,6 +1093,8 @@ def create_app(model: str | None = None) -> web.Application:
     app.router.add_post("/api/browser/tab/reveal", handle_browser_tab_reveal)
 
     # Register route modules
+    from framework.server.queen_mail import register_routes as register_queen_mail_routes
+    from framework.server.routes_claude_code_queens import register_routes as register_claude_code_queen_routes
     from framework.server.routes_colonies import register_routes as register_colonies_routes
     from framework.server.routes_colony_tools import register_routes as register_colony_tools_routes
     from framework.server.routes_colony_workers import register_routes as register_colony_worker_routes
@@ -1111,6 +1126,8 @@ def create_app(model: str | None = None) -> web.Application:
     register_worker_routes(app)
     register_queen_routes(app)
     register_soul_routes(app)
+    register_queen_mail_routes(app)
+    register_claude_code_queen_routes(app)
     register_queen_tools_routes(app)
     register_colonies_routes(app)
     register_colony_tools_routes(app)

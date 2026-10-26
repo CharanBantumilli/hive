@@ -4,9 +4,10 @@ import { apiUrl } from "@/api/client";
 import {
   User, Component, X, Calendar, Target, Activity, ArrowRight, Clock,
   Rocket, Globe, Mail, Search, Shield, TrendingUp, Briefcase, Code,
-  Database, FileText, MessageSquare, Zap, BarChart3, Users, Bot, Network,
+  Database, FileText, MessageSquare, Zap, BarChart3, Users, Bot, Network, SquareTerminal,
   type LucideIcon,
 } from "lucide-react";
+import { claudeCodeQueensApi, type ClaudeCodeQueen } from "@/api/claudeCodeQueens";
 import { useColony } from "@/context/ColonyContext";
 import { isQueenDecommissioned, useMe, useSetQueenPosition, useSetQueenPositions, useResetQueenPositions } from "@/lib/me";
 import { agentsApi } from "@/api/agents";
@@ -336,6 +337,51 @@ function QueenCard({
   );
 }
 
+/** A queen run by Claude Code (queen_mail.claude_code): dragged like a queen's card, opened read only. */
+function ClaudeCodeCard({
+  queen,
+  dragging,
+  onCardMouseDown,
+}: {
+  queen: ClaudeCodeQueen;
+  dragging: boolean;
+  onCardMouseDown: (e: React.MouseEvent) => void;
+}) {
+  const working = queen.conversations.some((c) => c.running);
+  return (
+    <div className="flex flex-col items-center w-full">
+      <div
+        onMouseDown={onCardMouseDown}
+        title="Run by Claude Code · drag to move · click to see her conversations"
+        className={`group flex flex-col items-center justify-center rounded-xl border border-dashed bg-card p-4 w-full h-[8.125rem] text-center select-none ${
+          dragging ? "cursor-grabbing shadow-xl ring-2 ring-primary/40" : "cursor-grab transition-all duration-200"
+        } border-border/80 hover:border-primary/30 hover:bg-primary/[0.03]`}
+      >
+        <div className="mb-2.5 relative">
+          <div className="w-11 h-11 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+            <SquareTerminal className="w-5 h-5" />
+          </div>
+          {working && (
+            <span className="absolute -right-0.5 -top-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-card" title="Working now" />
+          )}
+        </div>
+        <span className="text-[13px] font-semibold tracking-[-0.01em] line-clamp-1 text-foreground group-hover:text-primary transition-colors">
+          {queen.name}
+        </span>
+        <span className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">{queen.title}</span>
+      </div>
+      <div className="mt-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+        Claude Code · {queen.conversations.length} {queen.conversations.length === 1 ? "chat" : "chats"}
+      </div>
+      {queen.auth === "subscription" && (
+        <div className="text-[10px] text-amber-600" title="Runs on a Claude subscription: at your own risk">
+          subscription · at your own risk
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Main org chart page ──────────────────────────────────────────────── */
 
 // Fixed left-to-right order for queen cards
@@ -355,6 +401,13 @@ export default function OrgChart() {
   const queenProfiles = orderedQueens.filter(
     (q) => !isQueenDecommissioned(me, q.id),
   );
+  // Queens run by Claude Code sit on the chart beside the others, after them.
+  const [claudeQueens, setClaudeQueens] = useState<ClaudeCodeQueen[]>([]);
+  useEffect(() => {
+    claudeCodeQueensApi.list().then((r) => setClaudeQueens(r.queens)).catch(() => {});
+  }, []);
+  const claudeIds = new Set(claudeQueens.map((q) => q.id));
+  const cardIds = [...queenProfiles.map((q) => q.id), ...claudeQueens.map((q) => q.id)];
   const [selectedColony, setSelectedColony] = useState<Colony | null>(null);
   const [showDecommissioned, setShowDecommissioned] = useState(false);
 
@@ -377,22 +430,22 @@ export default function OrgChart() {
     origX: number; origY: number; lastX: number; lastY: number; moved: boolean;
   } | null>(null);
 
-  // Effective on-canvas position per visible queen: optimistic > saved > default.
+  // Effective on-canvas position per visible card: optimistic > saved > default.
   const positions: Record<string, { x: number; y: number }> = {};
-  queenProfiles.forEach((q, i) => {
-    const saved = me?.preferences?.queens?.[q.id]?.pos;
-    positions[q.id] =
-      localPositions[q.id] ??
+  cardIds.forEach((id, i) => {
+    const saved = me?.preferences?.queens?.[id]?.pos;
+    positions[id] =
+      localPositions[id] ??
       (saved && typeof saved.x === "number" && typeof saved.y === "number"
         ? { x: saved.x, y: saved.y }
-        : defaultQueenPos(i, queenProfiles.length));
+        : defaultQueenPos(i, cardIds.length));
   });
 
   // True when at least one card has been moved (this session or persisted) —
   // gates the reset control.
   const hasCustomPositions =
     Object.keys(localPositions).length > 0 ||
-    queenProfiles.some((q) => me?.preferences?.queens?.[q.id]?.pos != null);
+    cardIds.some((id) => me?.preferences?.queens?.[id]?.pos != null);
 
   // Positions captured at the moment of reset, so the button can offer "Undo"
   // to put them back. Cleared once the user moves a card again (a new layout).
@@ -400,12 +453,12 @@ export default function OrgChart() {
 
   const handleResetPositions = () => {
     const snapshot: Record<string, { x: number; y: number }> = {};
-    for (const q of queenProfiles) {
-      const saved = me?.preferences?.queens?.[q.id]?.pos;
+    for (const id of cardIds) {
+      const saved = me?.preferences?.queens?.[id]?.pos;
       const hasCustom =
-        localPositions[q.id] != null ||
+        localPositions[id] != null ||
         (saved && typeof saved.x === "number" && typeof saved.y === "number");
-      if (hasCustom) snapshot[q.id] = positions[q.id];
+      if (hasCustom) snapshot[id] = positions[id];
     }
     setUndoSnapshot(Object.keys(snapshot).length > 0 ? snapshot : null);
     setLocalPositions({});
@@ -476,8 +529,8 @@ export default function OrgChart() {
         setUndoSnapshot(null); // a new layout supersedes the post-reset undo
         void setQueenPosition(cd.id, { x: cd.lastX, y: cd.lastY });
       } else {
-        // No movement: a click, which opens her profile.
-        navigate(`/queen/${cd.id}/profile`);
+        // No movement: a click, which opens her profile (a Claude Code queen's read-only page).
+        navigate(claudeIds.has(cd.id) ? `/claude-code/${cd.id}` : `/queen/${cd.id}/profile`);
       }
       return;
     }
@@ -539,7 +592,7 @@ export default function OrgChart() {
               Org Chart
             </h2>
             <span className="text-xs text-muted-foreground">
-              {queenProfiles.length} queens &middot; {colonies.length} colonies
+              {cardIds.length} queens &middot; {colonies.length} colonies
             </span>
           </div>
         </div>
@@ -574,8 +627,8 @@ export default function OrgChart() {
               width={CANVAS_W}
               height={CANVAS_H}
             >
-              {queenProfiles.map((queen) => {
-                const p = positions[queen.id];
+              {cardIds.map((id) => {
+                const p = positions[id];
                 // Orthogonal "elbow" routing like a classic org chart: drop
                 // straight down from the CEO, run horizontally, then drop into
                 // the queen card's top — right angles instead of a diagonal.
@@ -586,11 +639,12 @@ export default function OrgChart() {
                 const midY = sy + (ey - sy) / 2;
                 return (
                   <path
-                    key={queen.id}
+                    key={id}
                     d={`M ${sx} ${sy} V ${midY} H ${ex} V ${ey}`}
                     fill="none"
                     stroke="currentColor"
                     strokeWidth={1}
+                    strokeDasharray={claudeIds.has(id) ? "4 3" : undefined}
                   />
                 );
               })}
@@ -626,6 +680,24 @@ export default function OrgChart() {
                     dragging={draggingId === queen.id}
                     onCardMouseDown={(e) => startCardDrag(e, queen.id, p)}
                     onSelectColony={handleSelectColony}
+                  />
+                </div>
+              );
+            })}
+
+            {/* Queens run by Claude Code — draggable too, opened read only */}
+            {claudeQueens.map((queen) => {
+              const p = positions[queen.id];
+              return (
+                <div
+                  key={queen.id}
+                  className="absolute"
+                  style={{ left: p.x, top: p.y, width: CARD_W, zIndex: draggingId === queen.id ? 10 : 1 }}
+                >
+                  <ClaudeCodeCard
+                    queen={queen}
+                    dragging={draggingId === queen.id}
+                    onCardMouseDown={(e) => startCardDrag(e, queen.id, p)}
                   />
                 </div>
               );

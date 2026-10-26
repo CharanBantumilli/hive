@@ -738,8 +738,12 @@ async def deliver_to_queen(
     image_content: list[dict] | None = None,
     display_message: str | None = None,
     saved_image_paths: list[str] | None = None,
+    correlation_id: str | None = None,
 ) -> str:
     """Hand a user message to the session's queen, reviving her if she is dead.
+
+    ``correlation_id`` marks the CLIENT_INPUT_RECEIVED event this publishes (a new one when not
+    given), so a listener can tell which message it was.
 
     Returns ``"queen"``, or ``"queen_revived"`` when she had to be revived.
     Raises :class:`QueenUnavailableError` when she can't be.
@@ -797,7 +801,7 @@ async def deliver_to_queen(
 
             from framework.host.event_bus import AgentEvent, EventType
 
-            input_correlation_id = uuid.uuid4().hex
+            input_correlation_id = correlation_id or uuid.uuid4().hex
 
             await session.event_bus.publish(
                 AgentEvent(
@@ -856,7 +860,7 @@ async def deliver_to_queen(
         _revived_executor = session.queen_executor
         _revived_node = _revived_executor.node_registry.get("queen") if _revived_executor else None
         if _revived_node is not None and hasattr(_revived_node, "inject_event"):
-            await _revived_node.inject_event(message, is_client_input=True, image_content=image_content)
+            await _revived_node.inject_event(message, is_client_input=True, image_content=image_content, correlation_id=correlation_id)
         return "queen_revived"
     except Exception as e:
         logger.exception("[handle_chat] Failed to revive queen: %s", e)

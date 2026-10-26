@@ -64,6 +64,10 @@ _QUEEN_INDEPENDENT_TOOLS = [
     # registry by ``register_queen_lifecycle_tools``; queen-only (workers
     # have no manifest, so it is stripped from spawned worker tool sets).
     "search_tools",
+    # Letters between queens (framework.server.queen_mail). Registered only
+    # when queen_mail is on; listed unconditionally so they stay queen-only.
+    "list_queens",
+    "message_queen",
 ]
 
 # Colony phase: the colony has been forked. Workers may be running,
@@ -122,6 +126,9 @@ _QUEEN_COLONY_TOOLS = [
     # full MCP surface is appended to the colony phase too, so the searchable
     # split (and thus search_tools) applies here as well.
     "search_tools",
+    # Letters between queens — see the note in _QUEEN_INDEPENDENT_TOOLS.
+    "list_queens",
+    "message_queen",
 ]
 
 if CRM_IN_THIS_BUILD:

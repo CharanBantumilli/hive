@@ -229,6 +229,10 @@ def cmd_serve(args: argparse.Namespace) -> int:
         await runner.setup()
         site = web.TCPSite(runner, args.host, args.port)
         await site.start()
+        # A Claude Code queen's runs write their letters back to this address (framework.server.queen_mail).
+        if manager.queen_mail is not None:
+            host = "127.0.0.1" if args.host in ("0.0.0.0", "::", "") else args.host
+            manager.queen_mail.base_url = f"http://[{host}]:{args.port}" if ":" in host else f"http://{host}:{args.port}"
 
         # Sentinel: colony-queen autopilot. The manager owns outbound
         # escalation delivery + the inbound Telegram/Slack listeners and
@@ -281,6 +285,10 @@ def cmd_serve(args: argparse.Namespace) -> int:
                     set_sentinel_manager(None)
                 except Exception:  # noqa: BLE001
                     pass
+            # Before the sessions stop: what queens say as they stop must not start new letters or
+            # Claude Code runs, and running ones are killed.
+            if manager.queen_mail is not None:
+                manager.queen_mail.close()
             await manager.shutdown_all()
             # Stopping sessions starts a last reflection each; give them a short grace.
             await manager.finish_background_tasks(_SHUTDOWN_GRACE_S)

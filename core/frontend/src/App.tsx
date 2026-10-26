@@ -11,6 +11,7 @@ import Home from "./pages/home";
 const ColonyChat = lazy(() => import("./pages/colony-chat"));
 const QueenDM = lazy(() => import("./pages/queen-dm"));
 const QueenProfile = lazy(() => import("./pages/queen-profile"));
+const ClaudeCodeQueen = lazy(() => import("./pages/claude-code-queen"));
 const OrgChart = lazy(() => import("./pages/org-chart"));
 const PromptLibrary = lazy(() => import("./pages/prompt-library"));
 const SkillsLibrary = lazy(() => import("./pages/skills-library"));
@@ -42,6 +43,7 @@ function App() {
         <Route path="/queen-routing" element={<Navigate to="/" replace />} />
         <Route path="/queen/:queenId" element={<QueenDM />} />
         <Route path="/queen/:queenId/profile" element={<QueenProfile />} />
+        <Route path="/claude-code/:queenId" element={<ClaudeCodeQueen />} />
         <Route path="/org-chart" element={<OrgChart />} />
         <Route path="/skills-library" element={<SkillsLibrary />} />
         <Route path="/prompt-library" element={<PromptLibrary />} />

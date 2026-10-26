@@ -1019,6 +1019,138 @@ def get_memory_reflection_config() -> MemoryReflectionConfig:
 
 
 @dataclass(frozen=True)
+class ClaudeCodeQueenConfig:
+    """A queen run by Claude Code, who takes part in queen mail (``framework.server.claude_code_queens``).
+
+    configuration.json: ``queen_mail.claude_code.<id>``, e.g.
+    ``{"name": "Claude", "api_key": "sk-ant-...", "permission_mode": "acceptEdits"}``.
+    """
+
+    queen_id: str
+    #: What the other queens see in list_queens.
+    name: str
+    title: str = "Claude Code"
+    #: The Claude Code program, and any arguments before Hive's.
+    command: tuple[str, ...] = ("claude",)
+    #: How she pays: "api_key" (``api_key``, the supported way) or "subscription" (the Claude plan signed in
+    #: in her config_dir, which you choose at your own risk; see docs/configuration.md).
+    auth: str = "api_key"
+    #: The Anthropic API key her runs use, when ``auth`` is "api_key".
+    api_key: str | None = field(default=None, repr=False)
+    #: ANTHROPIC_BASE_URL for her runs (a gateway in front of the API), when ``auth`` is "api_key".
+    api_base: str | None = None
+    #: Her CLAUDE_CONFIG_DIR: her settings, sessions and any sign-in. None: HIVE_HOME/claude_code/<id>/config.
+    config_dir: str | None = None
+    #: The folder she works in. None: HIVE_HOME/claude_code/<id>/workspace.
+    cwd: str | None = None
+    #: Passed to --permission-mode as is. "default" refuses, in a headless run, any tool that asks first.
+    permission_mode: str = "default"
+    allowed_tools: tuple[str, ...] = ()
+    disallowed_tools: tuple[str, ...] = ()
+    add_dirs: tuple[str, ...] = ()
+    #: --model; None leaves her own default.
+    model: str | None = None
+    #: The longest one turn of hers may run.
+    timeout_minutes: int = 30
+    #: Added to her system prompt after Hive's note on how letters reach her and where her replies go.
+    system_prompt: str | None = None
+    #: Extra environment variables for her runs.
+    env: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class QueenMailConfig:
+    """Queens writing to each other with ``message_queen`` (``framework.server.queen_mail``). Off by default.
+
+    configuration.json: ``"queen_mail": {"enabled": true, "queens": ["queen_a", "queen_b"], "daily_limit": 100, "max_depth": 8}``.
+    """
+
+    enabled: bool = False
+    #: The queens who write and are written to; None means every queen not removed from the catalog.
+    queens: tuple[str, ...] | None = None
+    #: Letters one queen may send in a day (replies don't count).
+    daily_limit: int = 100
+    #: Hops (a letter or a reply) in one chain, each set off by the one before; the hop past it isn't made.
+    max_depth: int = 8
+    #: Queens run by Claude Code, by id. They take part whatever ``queens`` says.
+    claude_code: dict[str, ClaudeCodeQueenConfig] = field(default_factory=dict)
+    #: Claude Code turns that may run at once, across those queens (read when the first one runs).
+    max_parallel_turns: int = 2
+
+    def includes(self, queen_id: str) -> bool:
+        """Whether ``queen_id`` may write and be written to (her removal from the catalog aside)."""
+        return self.enabled and (self.queens is None or queen_id in self.queens or queen_id in self.claude_code)
+
+
+def get_queen_mail_config() -> QueenMailConfig:
+    """The ``queen_mail`` section, with defaults for anything missing or invalid."""
+    raw = get_hive_config().get("queen_mail")
+    raw = raw if isinstance(raw, dict) else {}
+    default = QueenMailConfig()
+
+    def positive(key: str, fallback: int) -> int:
+        value = raw.get(key, fallback)
+        is_count = isinstance(value, int) and not isinstance(value, bool)
+        return value if is_count and value >= 1 else fallback
+
+    queens = raw.get("queens")
+    claude_code = raw.get("claude_code")
+    return QueenMailConfig(
+        enabled=raw.get("enabled") is True,
+        queens=tuple(q for q in queens if isinstance(q, str) and q) if isinstance(queens, list) else None,
+        daily_limit=positive("daily_limit", default.daily_limit),
+        max_depth=positive("max_depth", default.max_depth),
+        max_parallel_turns=positive("max_parallel_turns", default.max_parallel_turns),
+        claude_code={
+            queen_id: _claude_code_queen(queen_id, entry)
+            for queen_id, entry in (claude_code.items() if isinstance(claude_code, dict) else ())
+            if isinstance(queen_id, str) and queen_id and isinstance(entry, dict)
+        },
+    )
+
+
+def _claude_code_queen(queen_id: str, raw: dict[str, Any]) -> ClaudeCodeQueenConfig:
+    """One ``queen_mail.claude_code`` entry, with defaults for anything missing or invalid."""
+    default = ClaudeCodeQueenConfig(queen_id=queen_id, name=queen_id)
+
+    def text(key: str, fallback: str | None) -> str | None:
+        value = raw.get(key)
+        return value if isinstance(value, str) and value.strip() else fallback
+
+    def texts(key: str) -> tuple[str, ...]:
+        value = raw.get(key)
+        return tuple(v for v in value if isinstance(v, str) and v) if isinstance(value, list) else ()
+
+    command = raw.get("command")
+    if isinstance(command, str) and command.strip():
+        command_parts: tuple[str, ...] = (command,)
+    else:
+        command_parts = texts("command") or default.command
+    timeout = raw.get("timeout_minutes")
+    env = raw.get("env")
+    auth = raw.get("auth")
+    return ClaudeCodeQueenConfig(
+        queen_id=queen_id,
+        name=text("name", default.name) or queen_id,
+        title=text("title", default.title) or default.title,
+        command=command_parts,
+        auth=auth if auth in ("api_key", "subscription") else default.auth,
+        api_key=text("api_key", None),
+        api_base=text("api_base", None),
+        config_dir=text("config_dir", None),
+        cwd=text("cwd", None),
+        permission_mode=text("permission_mode", default.permission_mode) or default.permission_mode,
+        allowed_tools=texts("allowed_tools"),
+        disallowed_tools=texts("disallowed_tools"),
+        add_dirs=texts("add_dirs"),
+        model=text("model", None),
+        timeout_minutes=timeout if isinstance(timeout, int) and not isinstance(timeout, bool) and timeout >= 1 else default.timeout_minutes,
+        system_prompt=text("system_prompt", None),
+        env=tuple((k, v) for k, v in env.items() if isinstance(k, str) and isinstance(v, str)) if isinstance(env, dict) else (),
+    )
+
+
+@dataclass(frozen=True)
 class SoulSection:
     """One part of a queen's soul: what it holds, and how much."""
 

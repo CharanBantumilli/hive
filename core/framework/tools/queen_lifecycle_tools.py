@@ -3863,5 +3863,10 @@ def register_queen_lifecycle_tools(
 
     tools_registered += register_playbook_tools(registry, session)
 
+    # list_queens / message_queen — letters between queens, when queen_mail is on.
+    from framework.tools.queen_mail_tools import register_queen_mail_tools
+
+    tools_registered += register_queen_mail_tools(registry, session, session_manager)
+
     logger.info("Registered %d queen lifecycle tools", tools_registered)
     return tools_registered
