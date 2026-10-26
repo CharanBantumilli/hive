@@ -2,6 +2,10 @@
 
 > Full, detailed release notes live in [`docs/releases/`](docs/releases/). The entries below summarize the architecturally significant releases; older entries follow.
 
+## v1.0.13 — Letters Between Queens
+
+**New:** queens write to each other with `message_queen`, each in a conversation that lasts, with chains of letters kept to `max_depth` hops and every hop logged in `queens/mail.jsonl` (`queen_mail`); a queen can be Claude Code itself, with all its tools, writing and written to like any other, paid for with an API key and shown read only on the org chart (`queen_mail.claude_code`). Running her on a Claude subscription takes `"auth": "subscription"` and is at your own risk. See [docs/releases/v1.0.13.md](docs/releases/v1.0.13.md).
+
 ## v1.0.12 — A Soul of Her Own
 
 **New:** a queen keeps a soul, a short first-person record of who she has become, which she revises once a day from her chats and you approve change by change (`soul.queens.<id>`); her profile is a page of her own, where her persona is edited chapter by chapter; the org chart's positions can be added, removed and restored. **Changed:** a queen you made is on the team from the start. **Fixed:** a colony's queen no longer wakes up without her colony tools after her DM page is opened; a test run can no longer write into a real Hive home. See [docs/releases/v1.0.12.md](docs/releases/v1.0.12.md).
