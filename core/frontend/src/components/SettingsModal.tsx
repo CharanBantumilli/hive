@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  X, Eye, EyeOff, Check, Pencil, ChevronDown, Zap, ThumbsUp, Loader2,
+  X, Check, Pencil, ChevronDown, Zap, ThumbsUp, Loader2,
   AlertCircle, Camera, LogOut, ExternalLink, CreditCard, BarChart3,
-  Link2, KeyRound, Users, Shield, Bell, Gift, User, PlayCircle, Sparkles,
+  Link2, Users, Shield, Bell, Gift, PlayCircle, Sparkles,
 } from "lucide-react";
 import { useTutorial } from "./Tutorial/TutorialOverlay";
 import { apiUrl } from "@/api/client";
@@ -10,8 +10,6 @@ import { useColony } from "@/context/ColonyContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useMe } from "@/lib/me";
 import { useModel, LLM_PROVIDERS } from "@/context/ModelContext";
-import ProviderManager from "./ProviderManager";
-import { credentialsApi } from "@/api/credentials";
 import { configApi, type ModelOption, type RateLimitEntry } from "@/api/config";
 import { compressImage } from "@/lib/image-utils";
 import { useShowRuntimeLogs } from "@/hooks/use-show-runtime-logs";
@@ -50,7 +48,7 @@ export default function SettingsModal({ open, onClose, initialSection }: Setting
   const { me, refresh: refreshMe } = useMe();
   const {
     currentProvider, currentModel, connectedProviders, availableModels,
-    setModel, saveProviderKey, subscriptions, detectedSubscriptions,
+    subscriptions, detectedSubscriptions,
     activeSubscription, activateSubscription, apiBase,
   } = useModel();
 
@@ -100,12 +98,6 @@ export default function SettingsModal({ open, onClose, initialSection }: Setting
       .catch(() => setRateLimits([]));
   }, [open, activeSection, rateLimits]);
   const { start: startTour } = useTutorial();
-  const [editingProvider, setEditingProvider] = useState<string | null>(null);
-  const [keyInput, setKeyInput] = useState("");
-  const [showKey, setShowKey] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [validation, setValidation] = useState<Record<string, "validating" | { valid: boolean | null; message: string }>>({});
-  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
   const [densityDropdownOpen, setDensityDropdownOpen] = useState(false);
   const [motionDropdownOpen, setMotionDropdownOpen] = useState(false);
@@ -207,48 +199,6 @@ export default function SettingsModal({ open, onClose, initialSection }: Setting
     setUploadingAvatar(false);
   };
 
-  const clearValidation = (providerId: string) => {
-    setTimeout(() => setValidation((v) => { const next = { ...v }; delete next[providerId]; return next; }), 4000);
-  };
-
-  const handleSaveKey = async (providerId: string) => {
-    const trimmedKey = keyInput.trim();
-    if (!trimmedKey) return;
-    setSaving(true);
-    setValidation((v) => ({ ...v, [providerId]: "validating" }));
-
-    const validateResult = await credentialsApi
-      .validateKey(providerId, trimmedKey)
-      .catch(() => ({ valid: null as boolean | null, message: "Could not verify key" }));
-
-    if (validateResult.valid === false) {
-      setSaving(false);
-      setValidation((v) => ({ ...v, [providerId]: { valid: false, message: validateResult.message } }));
-      clearValidation(providerId);
-      return;
-    }
-
-    try {
-      await saveProviderKey(providerId, trimmedKey);
-    } catch {
-      setSaving(false);
-      setValidation((v) => ({ ...v, [providerId]: { valid: false, message: "Failed to save key" } }));
-      clearValidation(providerId);
-      return;
-    }
-
-    setSaving(false);
-    setEditingProvider(null);
-    setKeyInput("");
-    setShowKey(false);
-    setValidation((v) => ({ ...v, [providerId]: { valid: validateResult.valid, message: validateResult.message } }));
-    clearValidation(providerId);
-  };
-
-  const handleSelectModel = async (provider: string, modelId: string) => {
-    try { await setModel(provider, modelId); setModelDropdownOpen(false); } catch {}
-  };
-
   const handleActivateSubscription = async (subId: string) => {
     try { await activateSubscription(subId); } catch {}
   };
@@ -281,17 +231,6 @@ export default function SettingsModal({ open, onClose, initialSection }: Setting
   const selectableProviders = LLM_PROVIDERS.filter(
     (p) => connectedProviders.has(p.id) && availableModels[p.id]?.length,
   );
-
-  const startEditing = (providerId: string) => {
-    setEditingProvider(providerId);
-    setKeyInput("");
-    setShowKey(false);
-  };
-
-  const cancelEditing = () => {
-    setEditingProvider(null);
-    setKeyInput("");
-  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -719,129 +658,26 @@ export default function SettingsModal({ open, onClose, initialSection }: Setting
             )}
 
             {activeSection === "byok" && (
-              <>
-                <div>
-                  <h3 className="text-base font-semibold text-foreground">AI Model</h3>
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                    Connect an LLM provider with your own API key, then choose the model that powers your hive.
-                    {currentModel
-                      ? ` Currently using ${currentProviderName} · ${currentModelLabel}.`
-                      : " No model configured yet."}
-                  </p>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  {/* User-defined providers — one config = one JSON entry
-                      (providers.json). The standalone runtime's own
-                      credential management; built-in BYOK cards follow. */}
-                  <ProviderManager />
-                  {LLM_PROVIDERS.map((provider) => {
-                    const connected = connectedProviders.has(provider.id);
-                    const editing = editingProvider === provider.id;
-                    const models = availableModels[provider.id] || [];
-                    const isActiveProvider = currentProvider === provider.id;
-                    const v = validation[provider.id];
-                    return (
-                      <div key={provider.id} className="rounded-lg border border-border/60 bg-card p-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-[13px] font-semibold text-foreground">{provider.name}</span>
-                              {connected && (
-                                <span className="text-[9.5px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-500 inline-flex items-center gap-1">
-                                  <Check className="w-2.5 h-2.5" /> Connected
-                                </span>
-                              )}
-                              {isActiveProvider && (
-                                <span className="text-[9.5px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/15 text-primary">
-                                  Active
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-[11.5px] leading-relaxed text-muted-foreground mt-0.5">{provider.description}</p>
-                          </div>
-                          <button
-                            onClick={() => (editing ? setEditingProvider(null) : startEditing(provider.id))}
-                            className="flex-shrink-0 text-[11px] font-medium px-2 py-1 rounded-md border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors inline-flex items-center gap-1"
-                          >
-                            <KeyRound className="w-3 h-3" />
-                            {connected ? "Update key" : "Add key"}
-                          </button>
-                        </div>
-
-                        {editing && (
-                          <div className="mt-2.5 flex items-center gap-1.5">
-                            <div className="relative flex-1">
-                              <input
-                                type={showKey ? "text" : "password"}
-                                value={keyInput}
-                                onChange={(e) => setKeyInput(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") handleSaveKey(provider.id);
-                                }}
-                                placeholder={`Paste your ${provider.envVar} key`}
-                                autoFocus
-                                className="w-full text-xs rounded-md border border-border/60 bg-background px-2.5 py-1.5 pr-8 outline-none focus:border-primary/40"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => setShowKey((s) => !s)}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                              >
-                                {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                              </button>
-                            </div>
-                            <button
-                              onClick={() => handleSaveKey(provider.id)}
-                              disabled={saving || !keyInput.trim()}
-                              className="text-[11px] font-medium px-2.5 py-1.5 rounded-md bg-primary text-primary-foreground disabled:opacity-50 inline-flex items-center gap-1"
-                            >
-                              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                              Save
-                            </button>
-                          </div>
-                        )}
-
-                        {v === "validating" && (
-                          <p className="mt-1.5 text-[11px] text-muted-foreground inline-flex items-center gap-1">
-                            <Loader2 className="w-3 h-3 animate-spin" /> Validating…
-                          </p>
-                        )}
-                        {v && typeof v === "object" && (
-                          <p
-                            className={`mt-1.5 text-[11px] inline-flex items-center gap-1 ${
-                              v.valid === false ? "text-red-500" : "text-emerald-500"
-                            }`}
-                          >
-                            <AlertCircle className="w-3 h-3" /> {v.message}
-                          </p>
-                        )}
-
-                        {connected && models.length > 0 && (
-                          <div className="mt-2.5 flex flex-wrap gap-1.5">
-                            {models.map((m) => {
-                              const selected = isActiveProvider && currentModel === m.id;
-                              return (
-                                <button
-                                  key={m.id}
-                                  onClick={() => handleSelectModel(provider.id, m.id)}
-                                  className={`text-[11px] px-2 py-1 rounded-md border transition-colors ${
-                                    selected
-                                      ? "border-primary/40 bg-primary/[0.08] text-primary font-medium"
-                                      : "border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/20"
-                                  }`}
-                                >
-                                  {m.label || m.id}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
+              <div>
+                <h3 className="text-base font-semibold text-foreground">AI Model</h3>
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                  {currentModel ? `Currently using ${currentProviderName} · ${currentModelLabel}.` : "No model configured yet."}
+                </p>
+                <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
+                  Models now have a page of their own: the main model, the workers&apos; and the vision fallback, picked from searchable
+                  lists; API keys; endpoints such as Magpie and Ollama, listed live; and detected subscriptions.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    window.location.hash = "#/models";
+                  }}
+                  className="mt-4 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
+                >
+                  Open the Models page
+                </button>
+              </div>
             )}
           </div>
         </div>

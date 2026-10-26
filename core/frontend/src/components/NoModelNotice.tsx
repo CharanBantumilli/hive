@@ -1,6 +1,5 @@
 import { Cpu } from "lucide-react";
 import { useModelOptional } from "@/context/ModelContext";
-import { openSettings } from "@/lib/settings-events";
 
 /**
  * Sits above a chat's composer while no AI model is set up: the queen can't
@@ -23,7 +22,7 @@ export default function NoModelNotice() {
       </span>
       <button
         type="button"
-        onClick={() => openSettings("byok")}
+        onClick={() => (window.location.hash = "#/models")}
         className="ml-auto shrink-0 font-medium text-primary underline-offset-2 hover:underline"
       >
         Set up a model →

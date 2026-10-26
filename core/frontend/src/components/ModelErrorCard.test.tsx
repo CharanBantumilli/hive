@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import ModelErrorCard, { parseModelError } from "./ModelErrorCard";
-import { onOpenSettings } from "@/lib/settings-events";
 
 const KEYLESS =
   "[Error: LLM call failed: Stream error: litellm.AuthenticationError: AuthenticationError: OpenAIException - The api_key client option must be set. Please try again.]";
@@ -21,16 +20,14 @@ describe("parseModelError", () => {
 });
 
 describe("ModelErrorCard", () => {
-  it("links to the model settings and folds the raw error away", () => {
-    const opened: string[] = [];
-    const stop = onOpenSettings((section) => opened.push(section));
+  it("links to the Models page and folds the raw error away", () => {
+    window.location.hash = "";
     render(<ModelErrorCard error={parseModelError(KEYLESS)!} />);
 
     expect(screen.queryByText(/client option must be set/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /details/i }));
     expect(screen.getByText(/client option must be set/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /set up a model/i }));
-    expect(opened).toEqual(["byok"]);
-    stop();
+    expect(window.location.hash).toBe("#/models");
   });
 });

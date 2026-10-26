@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertCircle, Cpu, Loader2 } from "lucide-react";
+import { AlertCircle, ChevronRight, Cpu, Loader2 } from "lucide-react";
 import { queensApi } from "@/api/queens";
 import { configApi, type LlmSection } from "@/api/config";
 import { ApiError } from "@/api/client";
+import { modelsApi, type ModelChoice, type ModelsOverview } from "@/api/models";
+import ModelPicker from "@/components/ModelPicker";
 
 /**
- * The queen's own model: a section in the main LLM slot's shape, stored under `queen_llm` in
- * configuration.json. Without one she uses the main model (Settings → AI Model). Like the
- * slot editor, it shows and saves the section verbatim, or copies a saved provider into it.
+ * The queen's own model, stored under `queen_llm` in configuration.json. Without one she uses
+ * the main model (the Models page). She gets one from the same searchable list as every other
+ * slot; under Advanced, her section can be edited as JSON, or a saved provider copied into it.
  * Styled for her profile page (the `qp-` classes).
  */
 
@@ -27,6 +29,8 @@ export default function QueenModelSection({ queenId, onChange }: { queenId: stri
   const [section, setSection] = useState<LlmSection | null>(null);
   const [defaultModel, setDefaultModel] = useState<string>("");
   const [library, setLibrary] = useState<Record<string, LlmSection>>({});
+  const [overview, setOverview] = useState<ModelsOverview | null>(null);
+  const [advanced, setAdvanced] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +43,13 @@ export default function QueenModelSection({ queenId, onChange }: { queenId: stri
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [own, lib] = await Promise.all([queensApi.getLlm(queenId), configApi.getProviderLibrary()]);
+      const [own, lib, models] = await Promise.all([
+        queensApi.getLlm(queenId),
+        configApi.getProviderLibrary(),
+        // Without it she can still be set by hand under Advanced.
+        modelsApi.overview().catch(() => null),
+      ]);
+      setOverview(models);
       setSection(own.section);
       setDefaultModel(own.default_model ?? "");
       onChangeRef.current?.(own.section?.model ?? own.default_model ?? "");
@@ -68,6 +78,12 @@ export default function QueenModelSection({ queenId, onChange }: { queenId: stri
     } finally {
       setBusy(false);
     }
+  };
+
+  const pick = async (choice: ModelChoice | null) => {
+    if (choice) await modelsApi.setSlot(`queen:${queenId}`, choice);
+    else await modelsApi.clearSlot(`queen:${queenId}`);
+    await load();
   };
 
   const saveText = () => {
@@ -109,12 +125,31 @@ export default function QueenModelSection({ queenId, onChange }: { queenId: stri
                 </p>
               )}
               <p className="mt-0.5 text-[12px] text-muted-foreground">
-                {section ? "Her own model. Her running chats use it now." : "She uses the main model from Settings → AI Model."}
+                {section ? "Her own model. Her running chats use it now." : "She uses the main model from the Models page."}
               </p>
             </div>
           </div>
-          {text === null ? (
-            <div className="mt-4 flex flex-wrap items-center gap-2">
+          {overview && text === null && (
+            <div className="mt-4">
+              <ModelPicker
+                overview={overview}
+                value={overview.queens.find((q) => q.id === queenId) ?? null}
+                placeholder="Use the main model"
+                onPick={(choice) => pick(choice)}
+                onClear={() => pick(null)}
+                ariaLabel="Her model"
+              />
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setAdvanced((v) => !v)}
+            className="mt-3 inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground"
+          >
+            <ChevronRight className={`w-3.5 h-3.5 transition-transform ${advanced ? "rotate-90" : ""}`} /> Advanced
+          </button>
+          {!advanced ? null : text === null ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
               {names.length > 0 && (
                 <select
                   aria-label="Use a saved provider"

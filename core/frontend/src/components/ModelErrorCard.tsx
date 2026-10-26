@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { AlertTriangle, ChevronRight } from "lucide-react";
-import { openSettings } from "@/lib/settings-events";
 
 // The runtime's text for a failed model call (AgentLoop's visible_error).
 const MODEL_ERROR = /^\s*\[Error: LLM call failed: ([\s\S]*?)(?:\. Please try again\.)?\]\s*$/;
@@ -41,7 +40,7 @@ export default function ModelErrorCard({ error }: { error: ModelError }) {
           <div className="mt-1.5 flex items-center gap-4">
             <button
               type="button"
-              onClick={() => openSettings("byok")}
+              onClick={() => (window.location.hash = "#/models")}
               className="font-medium text-primary underline-offset-2 hover:underline"
             >
               {error.keyProblem ? "Set up a model →" : "Model settings →"}

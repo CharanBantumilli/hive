@@ -5,7 +5,6 @@ const model = { loading: false, hasApiKey: false };
 vi.mock("@/context/ModelContext", () => ({ useModelOptional: () => model }));
 
 import NoModelNotice from "./NoModelNotice";
-import { onOpenSettings } from "@/lib/settings-events";
 
 describe("NoModelNotice", () => {
   beforeEach(() => {
@@ -13,16 +12,14 @@ describe("NoModelNotice", () => {
     model.hasApiKey = false;
   });
 
-  it("links to the AI model settings when no model is set up", () => {
-    const opened: string[] = [];
-    const stop = onOpenSettings((section) => opened.push(section));
+  it("links to the Models page when no model is set up", () => {
+    window.location.hash = "";
     render(<NoModelNotice />);
 
     fireEvent.click(screen.getByRole("button", { name: /set up a model/i }));
 
     expect(screen.getByRole("status").textContent).toContain("No AI model yet.");
-    expect(opened).toEqual(["byok"]);
-    stop();
+    expect(window.location.hash).toBe("#/models");
   });
 
   it.each([

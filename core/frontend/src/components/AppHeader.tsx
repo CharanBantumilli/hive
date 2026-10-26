@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { apiUrl } from "@/api/client";
 import { useColony } from "@/context/ColonyContext";
 import { useHeaderActions } from "@/context/HeaderActionsContext";
-import { useModel } from "@/context/ModelContext";
 import { getQueenForAgent } from "@/lib/colony-registry";
 import {
   Crown,
@@ -92,7 +91,6 @@ export default function AppHeader() {
   const navigate = useNavigate();
   const { colonies, queens, queenProfiles, userProfile, userAvatarVersion, userHasAvatar } = useColony();
   const { actions, leftActions } = useHeaderActions();
-  const { currentModel, currentProvider, availableModels, activeSubscription, subscriptions } = useModel();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("profile");
   // Anything can ask for the dialog at a section (the chat's no-model notice does).
@@ -105,17 +103,6 @@ export default function AppHeader() {
     [],
   );
   const [colonySettingsOpen, setColonySettingsOpen] = useState(false);
-
-  // Derive active model display label
-  const activeSubInfo = activeSubscription
-    ? subscriptions.find((s) => s.id === activeSubscription)
-    : null;
-  const modelsProvider = activeSubInfo?.provider || currentProvider;
-  const models = availableModels[modelsProvider] || [];
-  const currentModelInfo = models.find((m) => m.id === currentModel);
-  const modelLabel = currentModelInfo
-    ? currentModelInfo.label.split(" - ")[0]
-    : currentModel || "No model";
 
   // Derive page title + icon from current route
   const colonyMatch = location.pathname.match(/^\/colony\/(.+)/);

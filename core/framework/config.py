@@ -332,6 +332,20 @@ def get_vision_fallback_model() -> str | None:
     return None
 
 
+def _endpoint_key(section: dict) -> str | None:
+    """The key for a slot served from a named endpoint (``"endpoint": "<name>"``), else None.
+
+    The endpoint's own key, or a placeholder: never an ambient key such as ``OPENAI_API_KEY``
+    (see :mod:`framework.llm.endpoints`).
+    """
+    name = section.get("endpoint") if isinstance(section, dict) else None
+    if not isinstance(name, str) or not name:
+        return None
+    from framework.llm.endpoints import key_for
+
+    return key_for(name)
+
+
 def get_vision_fallback_api_key() -> str | None:
     """Return the API key for the vision-fallback model.
 
@@ -343,6 +357,9 @@ def get_vision_fallback_api_key() -> str | None:
     vision = get_hive_config().get("vision_fallback", {})
     if not vision:
         return get_api_key()
+    endpoint_key = _endpoint_key(vision)
+    if endpoint_key:
+        return endpoint_key
     if vision.get("api_key"):
         return vision["api_key"]
     api_key_env_var = vision.get("api_key_env_var")
@@ -373,6 +390,9 @@ def get_worker_api_key() -> str | None:
     worker_llm = get_hive_config().get("worker_llm", {})
     if not worker_llm:
         return get_api_key()
+    endpoint_key = _endpoint_key(worker_llm)
+    if endpoint_key:
+        return endpoint_key
 
     # Literal key in the worker section (provider activation writes it).
     literal = worker_llm.get("api_key")
@@ -629,6 +649,9 @@ def get_queen_api_key(queen_id: str | None) -> str | None:
     section = get_queen_llm_section(queen_id)
     if section is None:
         return get_api_key()
+    endpoint_key = _endpoint_key(section)
+    if endpoint_key:
+        return endpoint_key
     if section.get("api_key"):
         return section["api_key"]
     cred_key = _get_api_key_from_credential_store(section.get("provider", ""))
@@ -739,6 +762,11 @@ def get_api_key() -> str | None:
     ``HIVE_API_KEY=""`` spawn before the first credentials push).
     """
     provider = ""
+
+    # A main model served from a named endpoint (Magpie, Ollama, ...) uses that endpoint's key.
+    endpoint_key = _endpoint_key(get_hive_config().get("llm", {}))
+    if endpoint_key:
+        return endpoint_key
 
     # If an explicit key pool is configured, use the first key.
     pool_keys = get_api_keys()

@@ -33,6 +33,43 @@ The default `max_tokens` value (8192) is defined as `DEFAULT_MAX_TOKENS` in `fra
 Optional packages installed next to Hive are turned on in this file too, under `channels` or
 `turn_context`: see [Optional packages](optional-packages.md).
 
+### Models, endpoints and Magpie
+
+The dashboard's **Models** page (Configuration → Models) sets which model each part of Hive uses: the main
+model (`llm`), the workers' (`worker_llm`, the main model when unset) and the vision fallback
+(`vision_fallback`). A model is picked from a searchable list of everything you can use: the catalog models of
+each provider whose key is saved, and every model an endpoint offers, listed live. Picking applies at once; the
+main model switches running chats too, and a failure shows its reason. A slot is written whole from what you
+pick: moving to another provider or endpoint leaves the old key and `extra_body` behind (within one provider or
+endpoint, `extra_body` carries over). Queens with a model of their own are listed there, and get theirs from the
+same list on their profile page. The page also keeps provider keys (in the encrypted credential store),
+endpoints, and detected subscriptions; the slots as raw JSON, the judge and saved setups are under Advanced.
+
+**Endpoints** are addresses that speak the OpenAI API and list their models at `/models`: Ollama, vLLM,
+LM Studio, a gateway. [Magpie](https://github.com/yetone/magpie), a gateway on your computer in front of many
+vendors, accounts and routing groups, is one already, at its own address; the page says whether it is running.
+Others are added on the page, or in `model_endpoints`:
+
+```json
+"model_endpoints": {
+  "magpie": {"api_base": "http://127.0.0.1:3425/v1"},
+  "ollama": {"api_base": "http://localhost:11434/v1"}
+}
+```
+
+An endpoint's key, when it needs one (Magpie's gateway key from another computer, say), is kept in the
+credential store, never in configuration.json. Without one, requests carry a placeholder, so a key Hive happens
+to hold (`OPENAI_API_KEY`) never reaches it. A slot served from an endpoint is written as
+`{"provider": "openai", "endpoint": "magpie", "model": "kimi/k3", "api_base": "...", "max_context_tokens": ...}`;
+its context window comes from the endpoint's list when it says, and the slot follows the endpoint when its
+address changes. A Claude Code queen can run behind Magpie too: give her `"api_key": "magpie"` and
+`"api_base": "http://127.0.0.1:3425"`, and Magpie serves her requests from whichever model it routes them to.
+
+**Subscriptions.** Plans signed in on this computer (Claude Code, Codex, Kimi Code, and others Hive detects)
+can run the main model; the page lists those it finds. Running a subscription unattended, on behalf of agents,
+may go against the terms of the plan, and the account may be limited or closed. Using one, directly or behind
+Magpie (whose own documentation warns of the same), is at your own risk; an API key is the supported way.
+
 ### A queen's own model
 
 Every queen uses the `llm` section unless she has her own under `queen_llm`, by queen id, in the
@@ -44,8 +81,8 @@ same shape:
 }
 ```
 
-Set it in the dashboard on her profile page (her card in the Org Chart, or her name above her chat → Mind): pick a saved provider,
-edit the section, or go back to the main model. Her running chats switch on their next model call,
+Set it in the dashboard on her profile page (her card in the Org Chart, or her name above her chat → Mind): pick a model
+from the same list as on the Models page, or, under Advanced, edit the section or copy a saved provider into it. Her running chats switch on their next model call,
 her context window follows her model, and changing the main model leaves her on hers. The key can
 be literal, `api_key_env_var` or in the credential store; the subscription logins (Claude Code,
 Codex, Kimi, Antigravity) work only for the main model. Her colony workers use her model too,

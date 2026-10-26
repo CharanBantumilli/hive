@@ -286,7 +286,7 @@ def _get_subscription_token(sub_id: str) -> str | None:
     return None
 
 
-def _hot_swap_sessions(request: web.Request, full_model: str, api_key: str | None, api_base: str | None) -> int:
+def _hot_swap_sessions(request: web.Request, full_model: str, api_key: str | None, api_base: str | None, **reconfigure: Any) -> int:
     """Hot-swap the LLM on all running sessions. Returns count of swapped providers.
 
     Walks every long-lived LLM holder reachable from a session:
@@ -304,6 +304,8 @@ def _hot_swap_sessions(request: web.Request, full_model: str, api_key: str | Non
     Also refreshes the SessionManager's default model so that subsequent
     one-shot LLM consumers (e.g. /messages/classify, new session bootstrap)
     pick up the new provider/model instead of the stale startup override.
+
+    ``reconfigure`` is passed on to each provider's ``reconfigure`` (``extra_body``, say).
     """
     from framework.server.session_manager import SessionManager
 
@@ -313,7 +315,7 @@ def _hot_swap_sessions(request: web.Request, full_model: str, api_key: str | Non
 
     def _reconfigure_if_possible(prov: Any) -> bool:
         if prov and hasattr(prov, "reconfigure"):
-            prov.reconfigure(full_model, api_key=api_key, api_base=api_base)
+            prov.reconfigure(full_model, api_key=api_key, api_base=api_base, **reconfigure)
             return True
         return False
 

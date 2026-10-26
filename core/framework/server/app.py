@@ -1107,6 +1107,7 @@ def create_app(model: str | None = None) -> web.Application:
     from framework.server.routes_mcp import register_routes as register_mcp_routes
     from framework.server.routes_memories import register_routes as register_memory_routes
     from framework.server.routes_messages import register_routes as register_message_routes
+    from framework.server.routes_models import register_routes as register_model_routes
     from framework.server.routes_prompts import register_routes as register_prompt_routes
     from framework.server.routes_queen_tools import register_routes as register_queen_tools_routes
     from framework.server.routes_queens import register_routes as register_queen_routes
@@ -1127,6 +1128,7 @@ def create_app(model: str | None = None) -> web.Application:
     register_queen_routes(app)
     register_soul_routes(app)
     register_queen_mail_routes(app)
+    register_model_routes(app)
     register_claude_code_queen_routes(app)
     register_queen_tools_routes(app)
     register_colonies_routes(app)

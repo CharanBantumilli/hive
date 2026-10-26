@@ -8,6 +8,7 @@ import {
   MessageSquarePlus,
   Network,
   KeyRound,
+  Cpu,
   Send,
   ChevronDown,
   Plus,
@@ -329,6 +330,10 @@ export default function Sidebar() {
           </button>
           {libraryExpanded && (
             <>
+              <button onClick={() => navigate("/models")} title="Models"
+                className="w-6 h-6 rounded-md flex items-center justify-center text-foreground/50 hover:text-foreground hover:bg-sidebar-item-hover transition-colors">
+                <Cpu className="w-3.5 h-3.5" />
+              </button>
               <button onClick={() => navigate("/credentials")} title="Credentials"
                 className="w-6 h-6 rounded-md flex items-center justify-center text-foreground/50 hover:text-foreground hover:bg-sidebar-item-hover transition-colors">
                 <KeyRound className="w-3.5 h-3.5" />
@@ -432,6 +437,13 @@ export default function Sidebar() {
         </button>
         {libraryExpanded && (
           <div className="ml-[22px] pl-2.5 border-l border-border/40 flex flex-col gap-px mt-px mb-0.5">
+            <button
+              onClick={() => navigate("/models")}
+              className="flex items-center gap-2 px-2.5 py-[4px] rounded-md text-[12px] text-foreground/55 hover:bg-sidebar-item-hover hover:text-foreground transition-all duration-150"
+            >
+              <Cpu className="w-3.5 h-3.5 opacity-60" />
+              <span>Models</span>
+            </button>
             <button
               onClick={() => navigate("/credentials")}
               className="flex items-center gap-2 px-2.5 py-[4px] rounded-md text-[12px] text-foreground/55 hover:bg-sidebar-item-hover hover:text-foreground transition-all duration-150"
