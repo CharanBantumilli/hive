@@ -155,6 +155,10 @@ def cmd_serve(args: argparse.Namespace) -> int:
     # process, so there is no window in which this names a port nobody is on.
     os.environ["HIVE_RUNTIME_PORT"] = str(args.port)
 
+    # Before anything spawns too: the browser bridge and its gcu clients (and the tool servers' parent
+    # watch) learn from this whose life bounds theirs.
+    owner_pid = _runtime_owner_pid()
+
     async def run_server() -> None:
         manager = app["manager"]
         shutdown_event = asyncio.Event()
@@ -197,19 +201,17 @@ def cmd_serve(args: argparse.Namespace) -> int:
                 # handlers (KeyboardInterrupt for SIGINT; SIGTERM kills).
                 pass
 
-        # Desktop-mode keepalive: hold a single control-RPC connection
-        # open to the bridge_host for the runtime's lifetime. Without
-        # this, the bridge_host's idle watchdog self-exits 30s after
-        # any window where no gcu MCP is connected — which is the steady
-        # state immediately after app startup (user opened Hive but
-        # hasn't triggered an agent yet). The Chrome extension then
-        # tells the user "Hive isn't running" against a fully alive
-        # runtime. Identifying via client_hello(electron_pid) lets the
-        # bridge's reaper distinguish a healthy keepalive from a zombie
+        # Keepalive: hold a single control-RPC connection open to the
+        # bridge_host for the runtime's lifetime, desktop or `hive serve`
+        # alone (a service, say). Without this, the bridge_host's idle
+        # watchdog self-exits 30s after any window where no gcu MCP is
+        # connected — which is the steady state immediately after startup
+        # (Hive is up but no agent has used the browser yet). The Chrome
+        # extension then tells the user "Hive isn't running" against a
+        # fully alive runtime. Identifying via client_hello(owner_pid) lets
+        # the bridge's reaper distinguish a healthy keepalive from a zombie
         # if this runtime ever crashes mid-connection.
-        bridge_keepalive_task: asyncio.Task | None = None
-        if os.environ.get("HIVE_DESKTOP_MODE") == "1":
-            bridge_keepalive_task = asyncio.create_task(_bridge_keepalive_loop(manager))
+        bridge_keepalive_task = asyncio.create_task(_bridge_keepalive_loop(owner_pid, manager))
 
         # Preload colonies specified via --colony
         for colony_arg in getattr(args, "colony", []) or []:
@@ -305,7 +307,21 @@ def cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
-async def _bridge_keepalive_loop(manager: Any = None) -> None:
+def _runtime_owner_pid() -> int:
+    """The PID the runtime's helper processes live and die with: the desktop's when it launched us, else ours.
+
+    Kept in ``HIVE_DESKTOP_PARENT_PID``, the variable the desktop sets, which every child inherits. Without
+    one (``hive serve`` on its own), the bridge's reaper closes each gcu connection 30s in for never
+    identifying, and the bridge exits once idle; the extension then reports "Hive isn't running".
+    """
+    raw = os.environ.get("HIVE_DESKTOP_PARENT_PID", "")
+    if not raw.isdigit():
+        raw = str(os.getpid())
+        os.environ["HIVE_DESKTOP_PARENT_PID"] = raw
+    return int(raw)
+
+
+async def _bridge_keepalive_loop(owner_pid: int, manager: Any = None) -> None:
     """Hold a control-RPC connection open to bridge_host for our lifetime.
 
     See call site in cmd_serve for the motivation. Reconnects with
@@ -328,22 +344,6 @@ async def _bridge_keepalive_loop(manager: Any = None) -> None:
         from gcu.browser.bridge_rpc import BridgeClient, BridgeClientError
     except ImportError:
         return
-
-    pid_str = os.environ.get("HIVE_DESKTOP_PARENT_PID")
-    if not pid_str or not pid_str.isdigit():
-        # No owner PID → we can't run the identified keepalive (client_hello
-        # needs it). But this loop is also the sole startup bridge ensurer in
-        # desktop mode, so bailing here without ensuring would leave the bridge
-        # unspawned — narrowing parity with the old synchronous cmd_serve call
-        # (which ensured whenever HIVE_DESKTOP_MODE==1, regardless of PARENT_PID).
-        # Do a best-effort one-shot ensure before returning. Off-thread because
-        # ensure_bridge_host_running blocks on Popen + an up-to-8s poll.
-        try:
-            await asyncio.to_thread(ensure_bridge_host_running)
-        except Exception:  # noqa: BLE001
-            pass
-        return
-    owner_pid = int(pid_str)
 
     logger = logging.getLogger(__name__)
 
